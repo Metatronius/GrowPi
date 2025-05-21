@@ -33,7 +33,7 @@ cd GrowPi
 
 ---
 
-### Frontend Setup (Svelte + Vite)
+### Frontend Setup
 
 ```
 cd frontend
@@ -49,7 +49,7 @@ npm run dev
 
 ---
 
-### Backend Setup (Flask)
+### Backend Setup
 
 ```
 cd backend
