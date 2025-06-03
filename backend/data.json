@@ -1,7 +1,24 @@
 {
-    "Username": "",
-    "Password": "",
-    "Fan_IP": "",
-    "Light_IP":"",
-    "W_Pump_IP":""
+    "Sensor Pins":{
+        "Air Temperature Sensor": 1,
+        "Relative Humidity Sensor": 1,
+        "Water Temperature Sensor": 2,
+        "Water pH Sensor": 3
+    },
+    "Kasa configs": {
+        "Username": "",
+        "Password": "",
+        "Device_IPs": {
+            "Fan_IP": "",
+            "Light_IP": "",
+            "W_Pump_IP": ""
+        }
+    },
+    "Ideal Ranges": {
+        "Air Temperature": {"min": 68, "max": 72, "target": 70},
+        "Relative Humidity": {"min": 40, "max": 60, "target": 50},
+        "Water Temperature": {"min": 70, "max": 75, "target": 72.5},
+        "Water pH": {"min": 5.0, "max": 6.0, "target": 5.5}
+    }
+
 }
