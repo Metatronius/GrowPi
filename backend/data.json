@@ -9,9 +9,9 @@
         "Username": "",
         "Password": "",
         "Device_IPs": {
-            "Fan_IP": "",
-            "Light_IP": "",
-            "W_Pump_IP": ""
+            "Fan": "",
+            "Light": "",
+            "Humidifier": ""
         }
     },
     "Ideal Ranges": {
@@ -40,5 +40,31 @@
             "Air Temperature": {"Lights Off": {"min": 60, "max": 72, "target": 70}},
             "Relative Humidity": {"min": 45, "max": 60, "target": 50}
         }
+    },
+    "State": {
+        "Current Stage": "Seedling",
+        "Air Temperature": 0,
+        "Relative Humidity": 0,
+        "Water Temperature": 0,
+        "Water pH": 0,
+        "Fan Status": false,
+        "Light Status": false,
+        "Water Pump Status": false
+    },
+    "History": {
+        "Air Temperature": [],
+        "Relative Humidity": [],
+        "Water Temperature": [],
+        "Water pH": []
+    },
+    "Notification Settings": {
+        "Polling Interval": 5,
+        "Notification Thresholds": {
+            "Air Temperature": 2,
+            "Relative Humidity": 5,
+            "Water Temperature": 2,
+            "Water pH": 0.5
+        },
+        "Notification Methods": ["Email", "SMS"]
     }
 }

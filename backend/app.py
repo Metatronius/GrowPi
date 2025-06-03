@@ -5,6 +5,7 @@ import json
 from meters import temp, rh, wtemp, ph
 from gpiozero import MCP3008
 from controls import plug
+import asyncio
 # Initialize Flask app
 
 app = Flask(__name__, static_folder='../frontend/dist')
@@ -59,10 +60,67 @@ def get_meters():
     }
     return jsonify(meters)
 
-@app.route('/controls')
+@app.route('/controls', methods=['POST'])
 def controls():
-    # TODO: Implement controls logic or return a placeholder response
-    return jsonify({"message": "Controls endpoint not implemented yet."})
+    # Get current stage and light state from the request or default to "Vegetative"/"Lights On"
+    payload = request.json or {}
+    stage = payload.get("stage", "Vegetative")
+    light_state = payload.get("light_state", "Lights On")
+
+    data = load_data()
+    ideal = data["Ideal Ranges"][stage]
+    kasa = data["Kasa configs"]
+    device_ips = kasa["Device_IPs"]
+    user = kasa["Username"]
+    pwd = kasa["Password"]
+
+    # Read sensors
+    temp_val = temp.read_temp()
+    rh_val = rh.read_rh()
+
+    # Get ideal temp and rh
+    temp_range = ideal["Air Temperature"][light_state]
+    rh_range = ideal["Relative Humidity"]
+
+    actions = []
+
+    async def control_devices():
+        # Fan logic
+        if temp_val > temp_range["max"]:
+            await plug.turnOn(device_ips["Fan"], user, pwd)
+            actions.append("Fan ON (temp too high)")
+        elif temp_val < temp_range["min"]:
+            await plug.turnOff(device_ips["Fan"], user, pwd)
+            actions.append("Fan OFF (temp too low)")
+        else:
+            await plug.turnOff(device_ips["Fan"], user, pwd)
+            actions.append("Fan OFF (temp ideal)")
+
+        # Humidifier logic
+        if rh_val < rh_range["min"]:
+            await plug.turnOn(device_ips["Humidifier"], user, pwd)
+            actions.append("Humidifier ON (RH too low)")
+        elif rh_val > rh_range["max"]:
+            # Only turn on fan for high RH if temp is not too low
+            if temp_val > temp_range["min"]:
+                await plug.turnOn(device_ips["Fan"], user, pwd)
+                actions.append("Fan ON (RH too high, temp ok)")
+            else:
+                await plug.turnOff(device_ips["Fan"], user, pwd)
+                actions.append("Fan OFF (RH too high, temp too low)")
+            await plug.turnOff(device_ips["Humidifier"], user, pwd)
+            actions.append("Humidifier OFF (RH too high)")
+        else:
+            await plug.turnOff(device_ips["Humidifier"], user, pwd)
+            actions.append("Humidifier OFF (RH ideal)")
+
+    asyncio.run(control_devices())
+
+    return jsonify({
+        "temperature": temp_val,
+        "humidity": rh_val,
+        "actions": actions
+    })
 
 @app.route('/get', methods=['GET'])
 def get_data():
@@ -115,6 +173,18 @@ def set_kasa():
         data["Kasa configs"].update(new_kasa)
     save_data(data)
     return jsonify({"message": "Kasa configuration updated successfully."})
+
+@app.route('/find_kasa', methods=['GET'])
+def find_kasa():
+    data = load_data()
+    fan_ip=plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Fan")
+    light_ip=plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Light")
+    humidifier_ip=plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Humidifier")
+    return jsonify({
+        "Fan": fan_ip,
+        "Light": light_ip,
+        "Humidifier": humidifier_ip
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

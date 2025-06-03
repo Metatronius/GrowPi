@@ -7,6 +7,9 @@
   };
   let menu = 'status';
   let selectedStage = '';
+  let findingKasa = false;
+  let kasaError = '';
+  let discoveredIPs = {};
 
   // Fetch all config data on mount
   async function fetchConfig() {
@@ -60,6 +63,20 @@
     });
     alert('Range updated!');
     fetchConfig();
+  }
+
+  async function findKasaDevices() {
+    findingKasa = true;
+    kasaError = '';
+    discoveredIPs = {};
+    try {
+      const res = await fetch('/find_kasa');
+      if (!res.ok) throw new Error('Failed to find Kasa devices');
+      discoveredIPs = await res.json();
+    } catch (e) {
+      kasaError = e.message;
+    }
+    findingKasa = false;
   }
 
   fetchConfig();
@@ -141,5 +158,19 @@
       <label>{key}: <input type="text" bind:value={config["Kasa configs"].Device_IPs[key]} /></label>
     {/each}
     <button on:click={setKasa}>Set Kasa Config</button>
+    <button on:click={findKasaDevices} disabled={findingKasa}>
+      {findingKasa ? 'Finding...' : 'Find Kasa Devices'}
+    </button>
+    {#if kasaError}
+      <div style="color: red;">{kasaError}</div>
+    {/if}
+    {#if Object.keys(discoveredIPs).length > 0}
+      <h4>Discovered Devices:</h4>
+      <ul>
+        {#each Object.entries(discoveredIPs) as [name, ip]}
+          <li>{name}: {ip}</li>
+        {/each}
+      </ul>
+    {/if}
   {/if}
 </main>

@@ -8,10 +8,11 @@ async def findDiviceIp(usern,pas):
         await devices.update()
         lis.append(devices.host)
     return lis
+
 async def get_Device_IP(usern,pas,name):
     lis =findDiviceIp(usern,pas)
     for ip in lis:
-        device = await Device.discover_single(str(ip), username=str(usern), password=str(pas))
+        device = await Discover.discover_single(str(ip), username=str(usern), password=str(pas))
         if device.alias == name:
             return ip
         return None
@@ -33,4 +34,3 @@ async def turnToggle(ip,usern,pas):
     else:
         await dev.turn_on()
     await dev.update
-
