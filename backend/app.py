@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 from meters import temp, rh, wtemp, ph
 from gpiozero import MCP3008
+from controls import plug
 # Initialize sensors
 temp = temp.TemperatureSensor(pin=0)  # Example pin
 rh = rh.RHMeter(pin=1)  # Example pin
@@ -76,6 +77,12 @@ def set_pins():
         elif sensor == "PHMeter":
             ph.pin = pin
     return jsonify({"message": "Pins updated successfully."})
+
+@app.route('/set_Plugs')
+def set_plugs():
+    new_plugs = request.json
+    for name, ip in new_plugs.items():
+        if()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

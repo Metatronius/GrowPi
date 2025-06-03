@@ -7,5 +7,5 @@ class PHMeter:
 
     def read_ph(self):
         voltage = self.sensor.value * 3.3
-        ph = 7 + ((2.5 - voltage) / 0.18)
+        ph = (-5.6548 * voltage) + 15.509 #as per Atlas Scientific's specifications
         return round(ph, 2)
