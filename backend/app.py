@@ -1,6 +1,14 @@
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import os
+from meters import temp, rh, wtemp, ph
+from gpiozero import MCP3008
+# Initialize sensors
+temp = temp.TemperatureSensor(pin=0)  # Example pin
+rh = rh.RHMeter(pin=1)  # Example pin
+wtemp = wtemp.WaterTemperatureSensor(pin=2)  # Example pin
+ph = ph.PHMeter(pin=3)  # Example pin
+# Initialize Flask app
 
 app = Flask(__name__, static_folder='../frontend/dist')
 CORS(app)
@@ -22,8 +30,19 @@ def serve_favicon():
     return send_from_directory(app.static_folder, 'favicon.ico')
 
 @app.route('/meters')
+def get_meters():
+    meters= {
+        "Air Temperature": {"value": temp.read_temp(), "unit": "°F"},
+        "Relative Humidity": {"value": rh.read_rh(), "unit": "%"},
+        "Water Temperature": {"value": wtemp.read_temp(), "unit": "°F"},
+        "Water pH": {"value": ph.read_ph(), "unit": "pH"},
+    }
+    return jsonify(meters)
 
 @app.route('/controls')
+def controls():
+    # TODO: Implement controls logic or return a placeholder response
+    return jsonify({"message": "Controls endpoint not implemented yet."})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
