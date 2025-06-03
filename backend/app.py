@@ -1,18 +1,32 @@
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 import os
+import json
 from meters import temp, rh, wtemp, ph
 from gpiozero import MCP3008
 from controls import plug
-# Initialize sensors
-temp = temp.TemperatureSensor(pin=0)  # Example pin
-rh = rh.RHMeter(pin=1)  # Example pin
-wtemp = wtemp.WaterTemperatureSensor(pin=2)  # Example pin
-ph = ph.PHMeter(pin=3)  # Example pin
 # Initialize Flask app
 
 app = Flask(__name__, static_folder='../frontend/dist')
 CORS(app)
+
+DATA_FILE = os.path.join(os.path.dirname(__file__), "data.json")
+
+def load_data():
+    with open(DATA_FILE, "r") as f:
+        return json.load(f)
+
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+# Load pins from data.json
+data = load_data()
+pins = data["Sensor Pins"]
+temp = temp.TemperatureSensor(pin=pins["Air Temperature Sensor"])
+rh = rh.RHMeter(pin=pins["Relative Humidity Sensor"])
+wtemp = wtemp.WaterTemperatureSensor(pin=pins["Water Temperature Sensor"])
+ph = ph.PHMeter(pin=pins["Water pH Sensor"])
 
 @app.route('/api/status')
 def status():
@@ -50,39 +64,46 @@ def controls():
     # TODO: Implement controls logic or return a placeholder response
     return jsonify({"message": "Controls endpoint not implemented yet."})
 
-ideal_ranges = {
-    "Air Temperature": {"min": 68, "max": 72, "target": 70},
-    "Relative Humidity": {"min": 40, "max": 60, "target": 50},
-    "Water Temperature": {"min": 70, "max": 75, "target": 72.5},
-    "Water pH": {"min": 5.0, "max": 6.0, "target": 5.5},
-}
-@app.route('/set')
+@app.route('/get', methods=['GET'])
+def get_data():
+    data = load_data()
+    return jsonify(data)
+
+@app.route('/set', methods=['POST'])
 def set_ideal_ranges():
     new_ranges = request.json
+    data = load_data()
     for key, value in new_ranges.items():
-        if key in ideal_ranges:
-            ideal_ranges[key].update(value)
-    return jsonify(ideal_ranges)
+        if key in data["Ideal Ranges"]:
+            data["Ideal Ranges"][key].update(value)
+    save_data(data)
+    return jsonify(data["Ideal Ranges"])
 
-@app.route('/set_Pins')
+@app.route('/set_Pins', methods=['POST'])
 def set_pins():
     new_pins = request.json
+    data = load_data()
     for sensor, pin in new_pins.items():
-        if sensor == "TemperatureSensor":
-            temp.pin = pin
-        elif sensor == "RHMeter":
-            rh.pin = pin
-        elif sensor == "WaterTemperatureSensor":
-            wtemp.pin = pin
-        elif sensor == "PHMeter":
-            ph.pin = pin
-    return jsonify({"message": "Pins updated successfully."})
+        if sensor in data["Sensor Pins"]:
+            data["Sensor Pins"][sensor] = pin
+    save_data(data)
+    # Re-initialize sensors with new pins
+    pins = data["Sensor Pins"]
+    global temp, rh, wtemp, ph
+    temp = temp.TemperatureSensor(pin=pins["Air Temperature Sensor"])
+    rh = rh.RHMeter(pin=pins["Relative Humidity Sensor"])
+    wtemp = wtemp.WaterTemperatureSensor(pin=pins["Water Temperature Sensor"])
+    ph = ph.PHMeter(pin=pins["Water pH Sensor"])
+    return jsonify({"message": "Pins updated and sensors re-initialized."})
 
-@app.route('/set_Plugs')
-def set_plugs():
-    new_plugs = request.json
-    for name, ip in new_plugs.items():
-        if()
+@app.route('/set_Kasa', methods=['POST'])
+def set_kasa():
+    new_kasa = request.json
+    data = load_data()
+    if "Kasa configs" in data:
+        data["Kasa configs"].update(new_kasa)
+    save_data(data)
+    return jsonify({"message": "Kasa configuration updated successfully."})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
