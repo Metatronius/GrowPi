@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 import os
 from meters import temp, rh, wtemp, ph
@@ -15,7 +15,7 @@ CORS(app)
 
 @app.route('/api/status')
 def status():
-    return jsonify({"temperature": 68, "humidity": 55})
+    return jsonify({"temperature": temp.read_temp(), "humidity": rh.read_rh()})
 
 @app.route('/')
 def serve_frontend():
@@ -43,6 +43,33 @@ def get_meters():
 def controls():
     # TODO: Implement controls logic or return a placeholder response
     return jsonify({"message": "Controls endpoint not implemented yet."})
+
+ideal_ranges = {
+    "Air Temperature": {"min": 68, "max": 72, "target": 70},
+    "Relative Humidity": {"min": 40, "max": 60, "target": 50},
+    "Water Temperature": {"min": 70, "max": 75, "target": 72.5},
+    "Water pH": {"min": 5.0, "max": 6.0, "target": 5.5},
+}
+@app.route('/set')
+def set_ideal_ranges():
+    new_ranges = request.json
+    for key, value in new_ranges.items():
+        if key in ideal_ranges:
+            ideal_ranges[key].update(value)
+    return jsonify(ideal_ranges)
+@app.route('/set_Pins')
+def set_pins():
+    new_pins = request.json
+    for sensor, pin in new_pins.items():
+        if sensor == "TemperatureSensor":
+            temp.pin = pin
+        elif sensor == "RHMeter":
+            rh.pin = pin
+        elif sensor == "WaterTemperatureSensor":
+            wtemp.pin = pin
+        elif sensor == "PHMeter":
+            ph.pin = pin
+    return jsonify({"message": "Pins updated successfully."})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
