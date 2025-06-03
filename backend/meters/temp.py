@@ -1,11 +1,15 @@
-from gpiozero import *
+import board
+from adafruit_htu21d import HTU21D
 import time
 
 class TemperatureSensor:
-    def __init__(self, pin):
-        self.sensor = MCP3008(channel=pin)
+    def __init__(self, sensor):
+        # Create sensor object, communicating over the board's default I2C bus
+        i2c = board.I2C()  # uses board.SCL and board.SDA
+        # i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
+        self.sensor = HTU21D(i2c)
 
     def read_temp(self):
-        voltage = self.sensor.value * 3.3
-        temp = (voltage - 0.5) * 100
-        return round(temp, 2)
+        temperature = self.sensor.temperature
+        farenheit = temperature * (9 / 5) + 32
+        return farenheit

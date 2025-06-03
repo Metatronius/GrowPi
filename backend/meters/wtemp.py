@@ -1,11 +1,13 @@
-from gpiozero import *
+from w1thermsensor import W1ThermSensor
 import time
 
 class WaterTemperatureSensor:
-    def __init__(self, pin):
-        self.sensor = MCP3008(channel=pin)
+    sensor = None
+    def __init__(self, sensor):
+        self.sensor =W1ThermSensor(W1ThermSensor.THERM_SENSOR_DS18B20, "00000588806a")
+        
 
     def read_temp(self):
-        voltage = self.sensor.value * 3.3
-        temp = (voltage - 0.5) * 100
-        return round(temp, 2)
+        temperature = self.sensor.get_temperature(W1ThermSensor.DEGREES_F)
+        return temperature
+        

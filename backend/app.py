@@ -71,13 +71,24 @@ def get_data():
 
 @app.route('/set', methods=['POST'])
 def set_ideal_ranges():
-    new_ranges = request.json
+    payload = request.json
+    stage = payload.get("stage")
+    meter = payload.get("meter")
+    subkey = payload.get("subkey")  # For nested keys like "Lights On"
+    values = payload.get("values")   # Dict with min/max/target
+
     data = load_data()
-    for key, value in new_ranges.items():
-        if key in data["Ideal Ranges"]:
-            data["Ideal Ranges"][key].update(value)
+    if stage in data["Ideal Ranges"]:
+        if meter in data["Ideal Ranges"][stage]:
+            if isinstance(data["Ideal Ranges"][stage][meter], dict) and subkey:
+                # Nested (e.g., Air Temperature -> Lights On)
+                if subkey in data["Ideal Ranges"][stage][meter]:
+                    data["Ideal Ranges"][stage][meter][subkey].update(values)
+            else:
+                # Flat (e.g., Relative Humidity)
+                data["Ideal Ranges"][stage][meter].update(values)
     save_data(data)
-    return jsonify(data["Ideal Ranges"])
+    return jsonify(data["Ideal Ranges"][stage])
 
 @app.route('/set_Pins', methods=['POST'])
 def set_pins():

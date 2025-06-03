@@ -6,6 +6,7 @@
     "Kasa configs": { Username: "", Password: "", Device_IPs: {} }
   };
   let menu = 'status';
+  let selectedStage = '';
 
   // Fetch all config data on mount
   async function fetchConfig() {
@@ -22,9 +23,13 @@
     await fetch('/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config["Ideal Ranges"])
+      body: JSON.stringify({
+        stage: selectedStage,
+        ranges: config["Ideal Ranges"][selectedStage]
+      })
     });
     alert('Ranges updated!');
+    fetchConfig();
   }
 
   async function setPins() {
@@ -34,6 +39,7 @@
       body: JSON.stringify(config["Sensor Pins"])
     });
     alert('Pins updated!');
+    fetchConfig();
   }
 
   async function setKasa() {
@@ -43,10 +49,25 @@
       body: JSON.stringify(config["Kasa configs"])
     });
     alert('Kasa config updated!');
+    fetchConfig();
+  }
+
+  async function setRange(stage, meter, subkey, values) {
+    await fetch('/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage, meter, subkey, values })
+    });
+    alert('Range updated!');
+    fetchConfig();
   }
 
   fetchConfig();
   getStatus();
+
+  $: if (!selectedStage && Object.keys(config["Ideal Ranges"]).length > 0) {
+    selectedStage = Object.keys(config["Ideal Ranges"])[0];
+  }
 </script>
 
 <nav>
@@ -68,15 +89,39 @@
 
   {#if menu === 'ranges'}
     <h2>Set Ideal Ranges</h2>
-    {#each Object.entries(config["Ideal Ranges"]) as [key, value]}
-      <fieldset>
-        <legend>{key}</legend>
-        <label>Min: <input type="number" bind:value={value.min} step="any" /></label>
-        <label>Max: <input type="number" bind:value={value.max} step="any" /></label>
-        <label>Target: <input type="number" bind:value={value.target} step="any" /></label>
-      </fieldset>
-    {/each}
-    <button on:click={setRanges}>Set Ranges</button>
+    <label>
+      Stage:
+      <select bind:value={selectedStage}>
+        {#each Object.keys(config["Ideal Ranges"]) as stage}
+          <option value={stage}>{stage}</option>
+        {/each}
+      </select>
+    </label>
+    {#if selectedStage}
+      {#each Object.entries(config["Ideal Ranges"][selectedStage]) as [meter, value]}
+        <fieldset>
+          <legend>{meter}</legend>
+          {#if typeof value === 'object' && value["Lights On"]}
+            <!-- Nested: Air Temperature -->
+            {#each Object.entries(value) as [subkey, subval]}
+              <fieldset>
+                <legend>{subkey}</legend>
+                <label>Min: <input type="number" bind:value={subval.min} step="any" /></label>
+                <label>Max: <input type="number" bind:value={subval.max} step="any" /></label>
+                <label>Target: <input type="number" bind:value={subval.target} step="any" /></label>
+                <button on:click={() => setRange(selectedStage, meter, subkey, subval)}>Set</button>
+              </fieldset>
+            {/each}
+          {:else}
+            <!-- Flat: Relative Humidity, Water Temperature, Water pH -->
+            <label>Min: <input type="number" bind:value={value.min} step="any" /></label>
+            <label>Max: <input type="number" bind:value={value.max} step="any" /></label>
+            <label>Target: <input type="number" bind:value={value.target} step="any" /></label>
+            <button on:click={() => setRange(selectedStage, meter, null, value)}>Set</button>
+          {/if}
+        </fieldset>
+      {/each}
+    {/if}
   {/if}
 
   {#if menu === 'pins'}
