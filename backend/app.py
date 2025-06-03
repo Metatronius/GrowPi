@@ -21,6 +21,9 @@ def serve_assets(path):
 def serve_favicon():
     return send_from_directory(app.static_folder, 'favicon.ico')
 
+@app.route('/meters')
+
+@app.route('/controls')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
