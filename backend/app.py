@@ -15,7 +15,12 @@ CORS(app)
 
 @app.route('/api/status')
 def status():
-    return jsonify({"temperature": temp.read_temp(), "humidity": rh.read_rh()})
+    return jsonify({
+        "temperature": temp.read_temp(),
+        "humidity": rh.read_rh(),
+        "ph": ph.read_ph(),
+        "wtemp": wtemp.read_temp()
+    })
 
 @app.route('/')
 def serve_frontend():
@@ -57,6 +62,7 @@ def set_ideal_ranges():
         if key in ideal_ranges:
             ideal_ranges[key].update(value)
     return jsonify(ideal_ranges)
+
 @app.route('/set_Pins')
 def set_pins():
     new_pins = request.json
