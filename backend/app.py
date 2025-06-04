@@ -24,18 +24,18 @@ def save_data(data):
 # Load pins from data.json
 data = load_data()
 pins = data["Sensor Pins"]
-temp = temp.TemperatureSensor(pin=pins["Air Temperature Sensor"])
-rh = rh.RHMeter(pin=pins["Relative Humidity Sensor"])
-wtemp = wtemp.WaterTemperatureSensor(pin=pins["Water Temperature Sensor"])
-ph = ph.PHMeter(pin=pins["Water pH Sensor"])
+temp_sensor = temp.TemperatureSensor()
+rh_sensor = rh.RHMeter()
+wtemp_sensor = wtemp.WaterTemperatureSensor()
+ph_sensor = ph.PHMeter(pins["Water pH Sensor"])
 
 @app.route('/api/status')
 def status():
     return jsonify({
-        "temperature": temp.read_temp(),
-        "humidity": rh.read_rh(),
-        "ph": ph.read_ph(),
-        "wtemp": wtemp.read_temp()
+        "temperature": temp_sensor.read_temp(),
+        "humidity": rh_sensor.read_rh(),
+        "ph": ph_sensor.read_ph(),
+        "wtemp": wtemp_sensor.read_temp()
     })
 
 @app.route('/')
@@ -159,10 +159,10 @@ def set_pins():
     # Re-initialize sensors with new pins
     pins = data["Sensor Pins"]
     global temp, rh, wtemp, ph
-    temp = temp.TemperatureSensor(pin=pins["Air Temperature Sensor"])
-    rh = rh.RHMeter(pin=pins["Relative Humidity Sensor"])
-    wtemp = wtemp.WaterTemperatureSensor(pin=pins["Water Temperature Sensor"])
-    ph = ph.PHMeter(pin=pins["Water pH Sensor"])
+    temp = temp.TemperatureSensor(pins["Air Temperature Sensor"])
+    rh = rh.RHMeter(pins["Relative Humidity Sensor"])
+    wtemp = wtemp.WaterTemperatureSensor(pins["Water Temperature Sensor"])
+    ph = ph.PHMeter(pins["Water pH Sensor"])
     return jsonify({"message": "Pins updated and sensors re-initialized."})
 
 @app.route('/set_Kasa', methods=['POST'])
