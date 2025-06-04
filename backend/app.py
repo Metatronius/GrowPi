@@ -34,11 +34,6 @@ def safe_init(sensor_class, *args, name=None):
         sensor_errors[name] = str(e)
         return None, str(e)
 
-temp_sensor, temp_error = safe_init(temp.TemperatureSensor, name="temperature")
-rh_sensor, rh_error = safe_init(rh.RHMeter, name="humidity")
-wtemp_sensor, wtemp_error = safe_init(wtemp.WaterTemperatureSensor, name="water_temperature")
-ph_sensor, ph_error = safe_init(ph.PHMeter, pins["Water pH Sensor"], name="ph")
-
 def safe_read(sensor, method, error_msg):
     if sensor is None:
         return {"error": error_msg}
@@ -228,6 +223,19 @@ def set_stage():
         save_data(data)
         return jsonify({"message": f"Stage set to {stage}."})
     return jsonify({"error": "Invalid stage."}), 400
+
+IS_DEV = os.environ.get("GROWPI_DEV", "0") == "1"
+
+if IS_DEV:
+    temp_sensor, temp_error = None, "Temperature sensor not available (mocked)"
+    rh_sensor, rh_error = None, "Humidity sensor not available (mocked)"
+    wtemp_sensor, wtemp_error = None, "Water temperature sensor not available (mocked)"
+    ph_sensor, ph_error = None, "pH sensor not available (mocked)"
+else:
+    temp_sensor, temp_error = safe_init(temp.TemperatureSensor, name="temperature")
+    rh_sensor, rh_error = safe_init(rh.RHMeter, name="humidity")
+    wtemp_sensor, wtemp_error = safe_init(wtemp.WaterTemperatureSensor, name="water_temperature")
+    ph_sensor, ph_error = safe_init(ph.PHMeter, pins["Water pH Sensor"], name="ph")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

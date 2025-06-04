@@ -1,4 +1,6 @@
 <script>
+  import { onMount } from 'svelte';
+
   let status = {};
   let config = {
     "Sensor Pins": {},
@@ -7,9 +9,12 @@
   };
   let menu = 'status';
   let selectedStage = '';
+  let stageToSet = '';
   let findingKasa = false;
   let kasaError = '';
   let discoveredIPs = {};
+
+  const stageOrder = ["Seedling", "Vegetative", "Flowering", "Drying"];
 
   // Fetch all config data on mount
   async function fetchConfig() {
@@ -69,7 +74,7 @@
     await fetch('/set_stage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: config["State"]["Current Stage"] })
+      body: JSON.stringify({ stage: stageToSet })
     });
     alert('Stage updated!');
     fetchConfig();
@@ -89,11 +94,16 @@
     findingKasa = false;
   }
 
-  fetchConfig();
-  getStatus();
+  onMount(() => {
+    fetchConfig();
+    getStatus();
+  });
 
   $: if (!selectedStage && Object.keys(config["Ideal Ranges"]).length > 0) {
     selectedStage = Object.keys(config["Ideal Ranges"])[0];
+  }
+  $: if (!stageToSet && config["State"]?.["Current Stage"]) {
+    stageToSet = config["State"]["Current Stage"];
   }
 </script>
 
@@ -118,8 +128,8 @@
       <legend style="font-weight:bold; color:#4CAF50;">Change Grow Stage</legend>
       <label style="margin-right:1em;">
         <span style="margin-right:0.5em;">Select Stage:</span>
-        <select bind:value={config["State"]["Current Stage"]} style="padding:0.3em;">
-          {#each Object.keys(config["Ideal Ranges"]) as stage}
+        <select bind:value={stageToSet} style="padding:0.3em;">
+          {#each stageOrder.filter(stage => config["Ideal Ranges"][stage]) as stage}
             <option value={stage}>{stage}</option>
           {/each}
         </select>
@@ -135,7 +145,7 @@
     <label>
       Stage:
       <select bind:value={selectedStage}>
-        {#each Object.keys(config["Ideal Ranges"]) as stage}
+        {#each stageOrder.filter(stage => config["Ideal Ranges"][stage]) as stage}
           <option value={stage}>{stage}</option>
         {/each}
       </select>
