@@ -6,7 +6,6 @@ from meters import temp, rh, wtemp, ph
 from gpiozero import MCP3008
 from controls import plug
 import asyncio
-# Initialize Flask app
 
 app = Flask(__name__, static_folder='../frontend/dist')
 CORS(app)
@@ -24,18 +23,37 @@ def save_data(data):
 # Load pins from data.json
 data = load_data()
 pins = data["Sensor Pins"]
-temp_sensor = temp.TemperatureSensor()
-rh_sensor = rh.RHMeter()
-wtemp_sensor = wtemp.WaterTemperatureSensor()
-ph_sensor = ph.PHMeter(pins["Water pH Sensor"])
+
+# Sensor initialization with error handling
+sensor_errors = {}
+
+def safe_init(sensor_class, *args, name=None):
+    try:
+        return sensor_class(*args), None
+    except Exception as e:
+        sensor_errors[name] = str(e)
+        return None, str(e)
+
+temp_sensor, temp_error = safe_init(temp.TemperatureSensor, name="temperature")
+rh_sensor, rh_error = safe_init(rh.RHMeter, name="humidity")
+wtemp_sensor, wtemp_error = safe_init(wtemp.WaterTemperatureSensor, name="water_temperature")
+ph_sensor, ph_error = safe_init(ph.PHMeter, pins["Water pH Sensor"], name="ph")
+
+def safe_read(sensor, method, error_msg):
+    if sensor is None:
+        return {"error": error_msg}
+    try:
+        return getattr(sensor, method)()
+    except Exception as e:
+        return {"error": f"Read failed: {e}"}
 
 @app.route('/api/status')
 def status():
     return jsonify({
-        "temperature": temp_sensor.read_temp(),
-        "humidity": rh_sensor.read_rh(),
-        "ph": ph_sensor.read_ph(),
-        "wtemp": wtemp_sensor.read_temp()
+        "temperature": safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available")),
+        "humidity": safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available")),
+        "ph": safe_read(ph_sensor, "read_ph", ph_error or sensor_errors.get("ph", "pH sensor not available")),
+        "wtemp": safe_read(wtemp_sensor, "read_temp", wtemp_error or sensor_errors.get("water_temperature", "Water temperature sensor not available"))
     })
 
 @app.route('/')
@@ -52,17 +70,27 @@ def serve_favicon():
 
 @app.route('/meters')
 def get_meters():
-    meters= {
-        "Air Temperature": {"value": temp.read_temp(), "unit": "°F"},
-        "Relative Humidity": {"value": rh.read_rh(), "unit": "%"},
-        "Water Temperature": {"value": wtemp.read_temp(), "unit": "°F"},
-        "Water pH": {"value": ph.read_ph(), "unit": "pH"},
-    }
-    return jsonify(meters)
+    return jsonify({
+        "Air Temperature": {
+            "value": safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available")),
+            "unit": "°F"
+        },
+        "Relative Humidity": {
+            "value": safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available")),
+            "unit": "%"
+        },
+        "Water Temperature": {
+            "value": safe_read(wtemp_sensor, "read_temp", wtemp_error or sensor_errors.get("water_temperature", "Water temperature sensor not available")),
+            "unit": "°F"
+        },
+        "Water pH": {
+            "value": safe_read(ph_sensor, "read_ph", ph_error or sensor_errors.get("ph", "pH sensor not available")),
+            "unit": "pH"
+        }
+    })
 
 @app.route('/controls', methods=['POST'])
 def controls():
-    # Get current stage and light state from the request or default to "Vegetative"/"Lights On"
     payload = request.json or {}
     stage = payload.get("stage", "Vegetative")
     light_state = payload.get("light_state", "Lights On")
@@ -74,11 +102,17 @@ def controls():
     user = kasa["Username"]
     pwd = kasa["Password"]
 
-    # Read sensors
-    temp_val = temp.read_temp()
-    rh_val = rh.read_rh()
+    temp_val = safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available"))
+    rh_val = safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available"))
 
-    # Get ideal temp and rh
+    # If either sensor failed, return error
+    if isinstance(temp_val, dict) or isinstance(rh_val, dict):
+        return jsonify({
+            "temperature": temp_val,
+            "humidity": rh_val,
+            "actions": ["Cannot control devices: sensor(s) unavailable."]
+        })
+
     temp_range = ideal["Air Temperature"][light_state]
     rh_range = ideal["Relative Humidity"]
 
@@ -101,7 +135,6 @@ def controls():
             await plug.turnOn(device_ips["Humidifier"], user, pwd)
             actions.append("Humidifier ON (RH too low)")
         elif rh_val > rh_range["max"]:
-            # Only turn on fan for high RH if temp is not too low
             if temp_val > temp_range["min"]:
                 await plug.turnOn(device_ips["Fan"], user, pwd)
                 actions.append("Fan ON (RH too high, temp ok)")
@@ -132,18 +165,16 @@ def set_ideal_ranges():
     payload = request.json
     stage = payload.get("stage")
     meter = payload.get("meter")
-    subkey = payload.get("subkey")  # For nested keys like "Lights On"
-    values = payload.get("values")   # Dict with min/max/target
+    subkey = payload.get("subkey")
+    values = payload.get("values")
 
     data = load_data()
     if stage in data["Ideal Ranges"]:
         if meter in data["Ideal Ranges"][stage]:
             if isinstance(data["Ideal Ranges"][stage][meter], dict) and subkey:
-                # Nested (e.g., Air Temperature -> Lights On)
                 if subkey in data["Ideal Ranges"][stage][meter]:
                     data["Ideal Ranges"][stage][meter][subkey].update(values)
             else:
-                # Flat (e.g., Relative Humidity)
                 data["Ideal Ranges"][stage][meter].update(values)
     save_data(data)
     return jsonify(data["Ideal Ranges"][stage])
@@ -158,11 +189,12 @@ def set_pins():
     save_data(data)
     # Re-initialize sensors with new pins
     pins = data["Sensor Pins"]
-    global temp, rh, wtemp, ph
-    temp = temp.TemperatureSensor(pins["Air Temperature Sensor"])
-    rh = rh.RHMeter(pins["Relative Humidity Sensor"])
-    wtemp = wtemp.WaterTemperatureSensor(pins["Water Temperature Sensor"])
-    ph = ph.PHMeter(pins["Water pH Sensor"])
+    global temp_sensor, rh_sensor, wtemp_sensor, ph_sensor, temp_error, rh_error, wtemp_error, ph_error
+    sensor_errors.clear()
+    temp_sensor, temp_error = safe_init(temp.TemperatureSensor, name="temperature")
+    rh_sensor, rh_error = safe_init(rh.RHMeter, name="humidity")
+    wtemp_sensor, wtemp_error = safe_init(wtemp.WaterTemperatureSensor, name="water_temperature")
+    ph_sensor, ph_error = safe_init(ph.PHMeter, pins["Water pH Sensor"], name="ph")
     return jsonify({"message": "Pins updated and sensors re-initialized."})
 
 @app.route('/set_Kasa', methods=['POST'])
@@ -177,9 +209,9 @@ def set_kasa():
 @app.route('/find_kasa', methods=['GET'])
 def find_kasa():
     data = load_data()
-    fan_ip=plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Fan")
-    light_ip=plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Light")
-    humidifier_ip=plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Humidifier")
+    fan_ip = plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Fan")
+    light_ip = plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Light")
+    humidifier_ip = plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Humidifier")
     return jsonify({
         "Fan": fan_ip,
         "Light": light_ip,
