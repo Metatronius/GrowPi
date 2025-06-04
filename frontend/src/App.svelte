@@ -107,21 +107,27 @@
 <main>
   {#if menu === 'status'}
     <h1>GrowPi Status</h1>
+    <p><strong>Current Stage:</strong> {config["State"]?.["Current Stage"]}</p>
     <p>Air Temperature: {status.temperature}°F</p>
     <p>Humidity: {status.humidity}%</p>
     <p>PH: {status.ph}</p>
     <p>Water Temperature: {status.wtemp}</p>
     <button on:click={getStatus}>Refresh</button>
 
-    <label>
-      Current Stage:
-      <select bind:value={config["State"]["Current Stage"]}>
-        {#each Object.keys(config["Ideal Ranges"]) as stage}
-          <option value={stage}>{stage}</option>
-        {/each}
-      </select>
-      <button on:click={setStage}>Set Stage</button>
-    </label>
+    <fieldset style="margin-top:2em; padding:1em; border:2px solid #4CAF50; border-radius:8px; max-width:350px;">
+      <legend style="font-weight:bold; color:#4CAF50;">Change Grow Stage</legend>
+      <label style="margin-right:1em;">
+        <span style="margin-right:0.5em;">Select Stage:</span>
+        <select bind:value={config["State"]["Current Stage"]} style="padding:0.3em;">
+          {#each Object.keys(config["Ideal Ranges"]) as stage}
+            <option value={stage}>{stage}</option>
+          {/each}
+        </select>
+      </label>
+      <button on:click={setStage} style="margin-left:1em; padding:0.4em 1em; background:#4CAF50; color:white; border:none; border-radius:4px;">
+        Set Stage
+      </button>
+    </fieldset>
   {/if}
 
   {#if menu === 'ranges'}
