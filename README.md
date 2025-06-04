@@ -15,98 +15,126 @@ A web-based control panel for Raspberry Pi grow projects.
 
 ---
 
-## 1. Clone the Repository
+## Installation (Step-by-Step)
 
-```sh
+### 1. Clone the Repository
+
+```bash
 git clone https://github.com/Metatronius/Raspberry_pi.git
-cd Raspberry-pi/GrowPi
+cd Raspberry_pi/GrowPi
 ```
 
----
+### 2. Backend Setup (Python/Flask)
 
-## 2. Frontend Setup
+#### a. Create and activate a Python virtual environment
 
-```sh
-cd frontend
-npm install
-npm run build
-```
-
-- For development preview:  
-  ```sh
-  npm run dev
-  ```
-- The built frontend will be in `frontend/dist/`.
-
----
-
-## 3. Backend Setup
-
-```sh
-cd ../backend
+```bash
+cd backend
 python3 -m venv venv
 source venv/bin/activate
+```
+
+#### b. Install Python dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-**Install hardware dependencies (on Raspberry Pi):**
+#### c. (Raspberry Pi only) Install hardware dependencies
 
-```sh
+```bash
 pip install adafruit-circuitpython-htu21d w1thermsensor gpiozero python-kasa
 ```
 
----
+#### d. (Development only) If you are NOT on a Raspberry Pi, set the environment variable to mock sensors:
 
-## 4. Enable 1-Wire and I2C Interfaces (Raspberry Pi only)
+```bash
+export GROWPI_DEV=1
+```
 
-- Run `sudo raspi-config`
-- Enable **I2C** and **1-Wire** under *Interfacing Options*
-- Reboot if prompted
+#### e. Start the backend server
 
----
-
-## 5. Configure `data.json`
-
-Edit `backend/data.json` to match your sensor pins and Kasa device info.
-
----
-
-## 6. Run the Backend Server
-
-```sh
-cd backend
-source venv/bin/activate
+```bash
 python app.py
 ```
 
-- The API will be available at:  
-  `http://localhost:5000`  
-  or  
-  `http://<your-raspberrypi-ip>:5000`
+The backend API will be available at `http://localhost:5000` or `http://<your-pi-ip>:5000`.
 
 ---
 
-## 7. Access the Web UI
+### 3. Frontend Setup (Svelte/Vite)
 
-Open a browser and go to:  
-`http://<your-raspberrypi-ip>:5000`
+#### a. Install Node.js (v18+ recommended) and npm if not already installed
+
+- [Node.js download page](https://nodejs.org/)
+
+#### b. Install frontend dependencies
+
+```bash
+cd ../frontend
+npm install
+```
+
+#### c. Start the frontend development server
+
+```bash
+npm run dev -- --host
+```
+
+- The frontend will be available at `http://<your-pi-ip>:5173` on your network.
 
 ---
 
-## Notes
+### 4. Configuration
 
-- **GPIO and sensors only work on Raspberry Pi hardware.**
-- For development on other platforms, mock or comment out hardware-specific code.
-- For Kasa device control, your Pi and Kasa devices must be on the same network.
+- Edit `backend/data.json` to match your sensor pins and Kasa device info.
+- Make sure your Pi and Kasa devices are on the same network.
+
+---
+
+### 5. Access the Web UI
+
+- On your Pi: [http://localhost:5173](http://localhost:5173)
+- On another device: [http://<your-pi-ip>:5173](http://<your-pi-ip>:5173)
 
 ---
 
-## Troubleshooting
+### 6. Troubleshooting
 
-- If you get import errors for sensor libraries, ensure you installed all hardware dependencies.
-- If sensors are not detected, check wiring and that I2C/1-Wire are enabled.
+- If you get errors about missing hardware, set `export GROWPI_DEV=1` before running the backend.
+- If you cannot access the frontend from another device, make sure you started Vite with `--host` and your firewall allows port 5173.
+- If you see CORS or proxy errors, check your `vite.config.js` proxy settings.
 
 ---
+
+## Quick Install (Recommended)
+
+You can use the provided `install.sh` script to automate the entire setup process for both backend and frontend.
+
+### 1. Make the script executable
+
+```bash
+chmod +x install.sh
+```
+
+### 2. Run the installer
+
+```bash
+./install.sh
+```
+
+- The script will prompt you to specify if you are running on a Raspberry Pi with sensors attached.
+- It will set up the Python backend, Node.js frontend, install all dependencies, and start both servers in the background.
+- Logs will be saved as `backend.log` and `frontend.log` in the project directory.
+
+### 3. Access the Web UI
+
+- On your Pi: [http://localhost:5173](http://localhost:5173)
+- On another device: [http://<your-pi-ip>:5173](http://<your-pi-ip>:5173)
+
+---
+
+**Manual installation steps are below if you prefer to set up each part yourself.**
 
 ## Project Structure
 
