@@ -65,6 +65,16 @@
     fetchConfig();
   }
 
+  async function setStage() {
+    await fetch('/set_stage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: config["State"]["Current Stage"] })
+    });
+    alert('Stage updated!');
+    fetchConfig();
+  }
+
   async function findKasaDevices() {
     findingKasa = true;
     kasaError = '';
@@ -102,6 +112,16 @@
     <p>PH: {status.ph}</p>
     <p>Water Temperature: {status.wtemp}</p>
     <button on:click={getStatus}>Refresh</button>
+
+    <label>
+      Current Stage:
+      <select bind:value={config["State"]["Current Stage"]}>
+        {#each Object.keys(config["Ideal Ranges"]) as stage}
+          <option value={stage}>{stage}</option>
+        {/each}
+      </select>
+      <button on:click={setStage}>Set Stage</button>
+    </label>
   {/if}
 
   {#if menu === 'ranges'}

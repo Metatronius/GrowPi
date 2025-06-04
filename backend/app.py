@@ -218,5 +218,16 @@ def find_kasa():
         "Humidifier": humidifier_ip
     })
 
+@app.route('/set_stage', methods=['POST'])
+def set_stage():
+    payload = request.json
+    stage = payload.get("stage")
+    data = load_data()
+    if stage and stage in data["Ideal Ranges"]:
+        data["State"]["Current Stage"] = stage
+        save_data(data)
+        return jsonify({"message": f"Stage set to {stage}."})
+    return jsonify({"error": "Invalid stage."}), 400
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
