@@ -17,6 +17,14 @@
   let lightOff = '';
   let phCal = { known_ph: '' };
   let phCalMsg = '';
+  let emailSettings = {
+    smtp_server: "",
+    smtp_port: 587,
+    username: "",
+    password: "",
+    from_email: "",
+    to_email: ""
+  };
 
   const stageOrder = ["Seedling", "Vegetative", "Flowering", "Drying"];
 
@@ -144,12 +152,27 @@
     fetchPhCal();
   }
 
+  async function fetchEmailSettings() {
+    const res = await fetch('/email_settings');
+    emailSettings = await res.json();
+  }
+
+  async function saveEmailSettings() {
+    await fetch('/email_settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailSettings)
+    });
+    alert('Email settings updated!');
+  }
+
   // Fetch data on mount
   onMount(() => {
     fetchConfig();
     getStatus();
     fetchLightSchedule();
     fetchPhCal();
+    fetchEmailSettings();
   });
 
   // Optionally, fetch schedule when switching to the light tab
@@ -175,6 +198,7 @@
   <button on:click={() => menu = 'kasa'}>Kasa Config</button>
   <button on:click={() => menu = 'light'}>Light Schedule</button>
   <button on:click={() => menu = 'phcal'}>pH Calibration</button>
+  <button on:click={() => menu = 'email'}>Email Settings</button>
 </nav>
 
 <main>
@@ -298,5 +322,18 @@
     {#if phCalMsg}
       <div style="color: green;">{phCalMsg}</div>
     {/if}
+  {/if}
+
+  {#if menu === 'email'}
+    <h2>Email Settings</h2>
+    <form on:submit|preventDefault={saveEmailSettings}>
+      <label>SMTP Server: <input type="text" bind:value={emailSettings.smtp_server} /></label>
+      <label>SMTP Port: <input type="number" bind:value={emailSettings.smtp_port} /></label>
+      <label>Username: <input type="text" bind:value={emailSettings.username} /></label>
+      <label>Password: <input type="password" bind:value={emailSettings.password} /></label>
+      <label>From Email: <input type="email" bind:value={emailSettings.from_email} /></label>
+      <label>To Email: <input type="email" bind:value={emailSettings.to_email} /></label>
+      <button type="submit">Save</button>
+    </form>
   {/if}
 </main>

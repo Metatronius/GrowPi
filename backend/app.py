@@ -6,6 +6,10 @@ from meters import temp, rh, wtemp, ph
 from gpiozero import MCP3008
 from controls import plug
 import asyncio
+import threading
+import time
+import smtplib
+from email.mime.text import MIMEText
 
 app = Flask(__name__, static_folder='../frontend/dist')
 CORS(app)
@@ -308,6 +312,42 @@ def ph_calibration_point():
     else:
         save_data(data)
         return jsonify({"message": f"Calibration point saved. Please add one more point."})
+
+def send_email(subject, body):
+    data = load_data()
+    email_settings = data.get("Email Settings", {})
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = email_settings.get("from_email", "")
+    msg['To'] = email_settings.get("to_email", "")
+
+    with smtplib.SMTP(email_settings.get("smtp_server", ""), int(email_settings.get("smtp_port", 587))) as server:
+        server.starttls()
+        server.login(email_settings.get("username", ""), email_settings.get("password", ""))
+        server.send_message(msg)
+
+def ph_monitor_loop():
+    while True:
+        # Read pH
+        ph_value = safe_read(ph_sensor, "read_ph", ph_error or sensor_errors.get("ph", "pH sensor not available"))
+        # Get ideal range from data.json
+        data = load_data()
+        stage = data["State"]["Current Stage"]
+        ph_range = data["Ideal Ranges"][stage]["Water pH"]
+        min_ph = ph_range["min"]
+        max_ph = ph_range["max"]
+
+        # If out of range, send email
+        if isinstance(ph_value, (int, float)) and (ph_value < min_ph or ph_value > max_ph):
+            send_email(
+                subject="GrowPi Alert: pH Out of Range",
+                body=f"Current pH is {ph_value:.2f}, which is outside the ideal range ({min_ph}-{max_ph}).",
+                to_email="your@email.com"
+            )
+        time.sleep(4 * 60 * 60)  # 4 hours
+
+# Start the background thread when the app starts
+threading.Thread(target=ph_monitor_loop, daemon=True).start()
 
 IS_DEV = os.environ.get("GROWPI_DEV", "0") == "1"
 
