@@ -229,7 +229,7 @@ def set_stage():
         data["State"]["Current Stage"] = stage
         save_data(data)
         return jsonify({"message": f"Stage set to {stage}."})
-    return jsonify({"error": "Invalid stage."}), 400
+    return jsonify({"error": "Invalid stage."}, 400)
 
 @app.route('/light_schedule', methods=['GET'])
 def get_light_schedule():
@@ -272,7 +272,42 @@ def set_ph_calibration():
             name="ph"
         )
         return jsonify({"message": "Calibration updated."})
-    return jsonify({"error": "Missing slope or intercept."}), 400
+    return jsonify({"error": "Missing slope or intercept."}, 400)
+
+@app.route('/ph_calibration_point', methods=['POST'])
+def ph_calibration_point():
+    payload = request.json
+    known_ph = payload.get("known_ph")
+    data = load_data()
+    pins = data["Sensor Pins"]
+    # Read voltage from probe
+    ph_adc = MCP3008(channel=pins["Water pH Sensor"])
+    voltage = ph_adc.value * 3.3
+    # Store calibration points in data.json
+    cal_points = data.setdefault("PH Calibration Points", [])
+    cal_points.append({"ph": known_ph, "voltage": voltage})
+    # If we have two points, calculate slope/intercept
+    if len(cal_points) == 2:
+        p1, p2 = cal_points
+        # slope = (ph2 - ph1) / (v2 - v1)
+        slope = (p2["ph"] - p1["ph"]) / (p2["voltage"] - p1["voltage"])
+        intercept = p1["ph"] - slope * p1["voltage"]
+        data["PH Calibration"] = {"slope": slope, "intercept": intercept}
+        data["PH Calibration Points"] = []  # Clear after use
+        save_data(data)
+        # Re-initialize pH sensor with new calibration
+        global ph_sensor, ph_error
+        ph_sensor, ph_error = safe_init(
+            ph.PHMeter,
+            pins["Water pH Sensor"],
+            slope,
+            intercept,
+            name="ph"
+        )
+        return jsonify({"message": f"Calibration complete! Slope: {slope:.4f}, Intercept: {intercept:.4f}"})
+    else:
+        save_data(data)
+        return jsonify({"message": f"Calibration point saved. Please add one more point."})
 
 IS_DEV = os.environ.get("GROWPI_DEV", "0") == "1"
 

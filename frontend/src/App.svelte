@@ -15,7 +15,7 @@
   let discoveredIPs = {};
   let lightOn = '';
   let lightOff = '';
-  let phCal = { slope: -5.6548, intercept: 15.509 };
+  let phCal = { known_ph: '' };
   let phCalMsg = '';
 
   const stageOrder = ["Seedling", "Vegetative", "Flowering", "Drying"];
@@ -129,6 +129,18 @@
     });
     const result = await res.json();
     phCalMsg = result.message || result.error;
+    fetchPhCal();
+  }
+
+  async function addPhCalPoint() {
+    const res = await fetch('/ph_calibration_point', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ known_ph: parseFloat(phCal.known_ph) })
+    });
+    const result = await res.json();
+    phCalMsg = result.message || result.error;
+    phCal.known_ph = '';
     fetchPhCal();
   }
 
@@ -280,17 +292,9 @@
 
   {#if menu === 'phcal'}
     <h2>pH Probe Calibration</h2>
-    <form on:submit|preventDefault={savePhCal}>
-      <label>
-        Slope:
-        <input type="number" step="any" bind:value={phCal.slope} required />
-      </label>
-      <label>
-        Intercept:
-        <input type="number" step="any" bind:value={phCal.intercept} required />
-      </label>
-      <button type="submit">Save Calibration</button>
-    </form>
+    <p>Step 1: Place the probe in a known pH solution (e.g., 4.00, 7.00, or 10.00).</p>
+    <input type="number" step="any" bind:value={phCal.known_ph} placeholder="Known pH value" />
+    <button on:click={addPhCalPoint}>Add Calibration Point</button>
     {#if phCalMsg}
       <div style="color: green;">{phCalMsg}</div>
     {/if}
