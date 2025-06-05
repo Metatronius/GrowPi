@@ -15,6 +15,8 @@
   let discoveredIPs = {};
   let lightOn = '';
   let lightOff = '';
+  let phCal = { slope: -5.6548, intercept: 15.509 };
+  let phCalMsg = '';
 
   const stageOrder = ["Seedling", "Vegetative", "Flowering", "Drying"];
 
@@ -114,11 +116,28 @@
     alert('Light schedule updated!');
   }
 
-  // Fetch schedule on mount
+  async function fetchPhCal() {
+    const res = await fetch('/ph_calibration');
+    phCal = await res.json();
+  }
+
+  async function savePhCal() {
+    const res = await fetch('/ph_calibration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(phCal)
+    });
+    const result = await res.json();
+    phCalMsg = result.message || result.error;
+    fetchPhCal();
+  }
+
+  // Fetch data on mount
   onMount(() => {
     fetchConfig();
     getStatus();
     fetchLightSchedule();
+    fetchPhCal();
   });
 
   // Optionally, fetch schedule when switching to the light tab
@@ -132,6 +151,9 @@
   $: if (!stageToSet && config["State"]?.["Current Stage"]) {
     stageToSet = config["State"]["Current Stage"];
   }
+  $: if (menu === 'phcal') {
+    fetchPhCal();
+  }
 </script>
 
 <nav>
@@ -140,6 +162,7 @@
   <button on:click={() => menu = 'pins'}>Sensor Pins</button>
   <button on:click={() => menu = 'kasa'}>Kasa Config</button>
   <button on:click={() => menu = 'light'}>Light Schedule</button>
+  <button on:click={() => menu = 'phcal'}>pH Calibration</button>
 </nav>
 
 <main>
@@ -253,5 +276,23 @@
       </label>
       <button type="submit">Save Schedule</button>
     </form>
+  {/if}
+
+  {#if menu === 'phcal'}
+    <h2>pH Probe Calibration</h2>
+    <form on:submit|preventDefault={savePhCal}>
+      <label>
+        Slope:
+        <input type="number" step="any" bind:value={phCal.slope} required />
+      </label>
+      <label>
+        Intercept:
+        <input type="number" step="any" bind:value={phCal.intercept} required />
+      </label>
+      <button type="submit">Save Calibration</button>
+    </form>
+    {#if phCalMsg}
+      <div style="color: green;">{phCalMsg}</div>
+    {/if}
   {/if}
 </main>

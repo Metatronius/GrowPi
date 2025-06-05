@@ -189,7 +189,14 @@ def set_pins():
     temp_sensor, temp_error = safe_init(temp.TemperatureSensor, name="temperature")
     rh_sensor, rh_error = safe_init(rh.RHMeter, name="humidity")
     wtemp_sensor, wtemp_error = safe_init(wtemp.WaterTemperatureSensor, name="water_temperature")
-    ph_sensor, ph_error = safe_init(ph.PHMeter, pins["Water pH Sensor"], name="ph")
+    ph_cal = data.get("PH Calibration", {"slope": -5.6548, "intercept": 15.509})
+    ph_sensor, ph_error = safe_init(
+        ph.PHMeter,
+        pins["Water pH Sensor"],
+        ph_cal["slope"],
+        ph_cal["intercept"],
+        name="ph"
+    )
     return jsonify({"message": "Pins updated and sensors re-initialized."})
 
 @app.route('/set_Kasa', methods=['POST'])
@@ -240,6 +247,33 @@ def set_light_schedule():
     save_data(data)
     return jsonify({"message": "Light schedule updated."})
 
+@app.route('/ph_calibration', methods=['GET'])
+def get_ph_calibration():
+    data = load_data()
+    return jsonify(data.get("PH Calibration", {}))
+
+@app.route('/ph_calibration', methods=['POST'])
+def set_ph_calibration():
+    payload = request.json
+    slope = payload.get("slope")
+    intercept = payload.get("intercept")
+    data = load_data()
+    if slope is not None and intercept is not None:
+        data["PH Calibration"] = {"slope": slope, "intercept": intercept}
+        save_data(data)
+        # Re-initialize pH sensor with new calibration
+        pins = data["Sensor Pins"]
+        global ph_sensor, ph_error
+        ph_sensor, ph_error = safe_init(
+            ph.PHMeter,
+            pins["Water pH Sensor"],
+            slope,
+            intercept,
+            name="ph"
+        )
+        return jsonify({"message": "Calibration updated."})
+    return jsonify({"error": "Missing slope or intercept."}), 400
+
 IS_DEV = os.environ.get("GROWPI_DEV", "0") == "1"
 
 if IS_DEV:
@@ -251,7 +285,14 @@ else:
     temp_sensor, temp_error = safe_init(temp.TemperatureSensor, name="temperature")
     rh_sensor, rh_error = safe_init(rh.RHMeter, name="humidity")
     wtemp_sensor, wtemp_error = safe_init(wtemp.WaterTemperatureSensor, name="water_temperature")
-    ph_sensor, ph_error = safe_init(ph.PHMeter, pins["Water pH Sensor"], name="ph")
+    ph_cal = data.get("PH Calibration", {"slope": -5.6548, "intercept": 15.509})
+    ph_sensor, ph_error = safe_init(
+        ph.PHMeter,
+        pins["Water pH Sensor"],
+        ph_cal["slope"],
+        ph_cal["intercept"],
+        name="ph"
+    )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
