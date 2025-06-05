@@ -195,8 +195,8 @@
   {#if menu === 'status'}
     <h1>GrowPi Status</h1>
     <p><strong>Current Stage:</strong> {config["State"]?.["Current Stage"]}</p>
-    <p>Air Temperature: {status.temperature}°F</p>
-    <p>Humidity: {status.humidity}%</p>
+    <p>Air Temperature: {status.temperature !== undefined ? status.temperature.toFixed(2) : ''}°F</p>
+    <p>Humidity: {status.humidity !== undefined ? status.humidity.toFixed(2) : ''}%</p>
     <p>PH: {status.ph}</p>
     <p>Water Temperature: {status.wtemp}</p>
     <button on:click={getStatus}>Refresh</button>
