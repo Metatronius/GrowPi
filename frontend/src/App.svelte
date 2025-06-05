@@ -52,15 +52,6 @@
     fetchConfig();
   }
 
-  async function setPins() {
-    await fetch('/set_Pins', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config["Sensor Pins"])
-    });
-    alert('Pins updated!');
-    fetchConfig();
-  }
 
   async function setKasa() {
     await fetch('/set_Kasa', {
@@ -194,7 +185,6 @@
 <nav>
   <button on:click={() => menu = 'status'}>Status</button>
   <button on:click={() => menu = 'ranges'}>Ideal Ranges</button>
-  <button on:click={() => menu = 'pins'}>Sensor Pins</button>
   <button on:click={() => menu = 'kasa'}>Kasa Config</button>
   <button on:click={() => menu = 'light'}>Light Schedule</button>
   <button on:click={() => menu = 'phcal'}>pH Calibration</button>
@@ -266,13 +256,6 @@
     {/if}
   {/if}
 
-  {#if menu === 'pins'}
-    <h2>Set Sensor Pins</h2>
-    {#each Object.entries(config["Sensor Pins"]) as [key, value]}
-      <label>{key}: <input type="number" bind:value={config["Sensor Pins"][key]} min="0" max="7" /></label>
-    {/each}
-    <button on:click={setPins}>Set Pins</button>
-  {/if}
 
   {#if menu === 'kasa'}
     <h2>Kasa Configuration</h2>
