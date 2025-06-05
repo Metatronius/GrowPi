@@ -1,12 +1,11 @@
 from w1thermsensor import W1ThermSensor
-import time
 
 class WaterTemperatureSensor:
-    sensor = None
     def __init__(self):
-        self.sensor =W1ThermSensor(W1ThermSensor.THERM_SENSOR_DS18B20, "00000588806a")
-        
+        self.sensor = W1ThermSensor()  # Uses the first detected sensor
+
     def read_temp(self):
-        temperature = self.sensor.get_temperature(W1ThermSensor.DEGREES_F)
-        return temperature
-        
+        # Returns temperature in Fahrenheit
+        celsius = self.sensor.get_temperature()
+        fahrenheit = celsius * 9 / 5 + 32
+        return round(fahrenheit, 2)
