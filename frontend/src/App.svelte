@@ -13,6 +13,8 @@
   let findingKasa = false;
   let kasaError = '';
   let discoveredIPs = {};
+  let lightOn = '';
+  let lightOff = '';
 
   const stageOrder = ["Seedling", "Vegetative", "Flowering", "Drying"];
 
@@ -94,10 +96,35 @@
     findingKasa = false;
   }
 
+  // Fetch the light schedule from the backend
+  async function fetchLightSchedule() {
+    const res = await fetch('/light_schedule');
+    const sched = await res.json();
+    lightOn = sched.on || "06:00";
+    lightOff = sched.off || "22:00";
+  }
+
+  // Save the light schedule to the backend
+  async function saveLightSchedule() {
+    await fetch('/light_schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ on: lightOn, off: lightOff })
+    });
+    alert('Light schedule updated!');
+  }
+
+  // Fetch schedule on mount
   onMount(() => {
     fetchConfig();
     getStatus();
+    fetchLightSchedule();
   });
+
+  // Optionally, fetch schedule when switching to the light tab
+  $: if (menu === 'light') {
+    fetchLightSchedule();
+  }
 
   $: if (!selectedStage && Object.keys(config["Ideal Ranges"]).length > 0) {
     selectedStage = Object.keys(config["Ideal Ranges"])[0];
@@ -112,6 +139,7 @@
   <button on:click={() => menu = 'ranges'}>Ideal Ranges</button>
   <button on:click={() => menu = 'pins'}>Sensor Pins</button>
   <button on:click={() => menu = 'kasa'}>Kasa Config</button>
+  <button on:click={() => menu = 'light'}>Light Schedule</button>
 </nav>
 
 <main>
@@ -124,20 +152,22 @@
     <p>Water Temperature: {status.wtemp}</p>
     <button on:click={getStatus}>Refresh</button>
 
-    <fieldset style="margin-top:2em; padding:1em; border:2px solid #4CAF50; border-radius:8px; max-width:350px;">
-      <legend style="font-weight:bold; color:#4CAF50;">Change Grow Stage</legend>
-      <label style="margin-right:1em;">
-        <span style="margin-right:0.5em;">Select Stage:</span>
-        <select bind:value={stageToSet} style="padding:0.3em;">
-          {#each stageOrder.filter(stage => config["Ideal Ranges"][stage]) as stage}
-            <option value={stage}>{stage}</option>
-          {/each}
-        </select>
-      </label>
-      <button on:click={setStage} style="margin-left:1em; padding:0.4em 1em; background:#4CAF50; color:white; border:none; border-radius:4px;">
-        Set Stage
-      </button>
-    </fieldset>
+    <div style="display: flex; justify-content: center; margin-top: 2em;">
+      <fieldset style="padding:1em; border:2px solid #4CAF50; border-radius:8px; max-width:350px;">
+        <legend style="font-weight:bold; color:#4CAF50;">Change Grow Stage</legend>
+        <label style="margin-right:1em;">
+          <span style="margin-right:0.5em;">Select Stage:</span>
+          <select bind:value={stageToSet} style="padding:0.3em;">
+            {#each stageOrder.filter(stage => config["Ideal Ranges"][stage]) as stage}
+              <option value={stage}>{stage}</option>
+            {/each}
+          </select>
+        </label>
+        <button on:click={setStage} style="margin-left:1em; padding:0.4em 1em; background:#4CAF50; color:white; border:none; border-radius:4px;">
+          Set Stage
+        </button>
+      </fieldset>
+    </div>
   {/if}
 
   {#if menu === 'ranges'}
@@ -208,5 +238,20 @@
         {/each}
       </ul>
     {/if}
+  {/if}
+
+  {#if menu === 'light'}
+    <h2>Light Schedule</h2>
+    <form on:submit|preventDefault={saveLightSchedule}>
+      <label>
+        On Time:
+        <input type="time" bind:value={lightOn} required />
+      </label>
+      <label>
+        Off Time:
+        <input type="time" bind:value={lightOff} required />
+      </label>
+      <button type="submit">Save Schedule</button>
+    </form>
   {/if}
 </main>

@@ -224,6 +224,22 @@ def set_stage():
         return jsonify({"message": f"Stage set to {stage}."})
     return jsonify({"error": "Invalid stage."}), 400
 
+@app.route('/light_schedule', methods=['GET'])
+def get_light_schedule():
+    data = load_data()
+    return jsonify(data.get("Light Schedule", {}))
+
+@app.route('/light_schedule', methods=['POST'])
+def set_light_schedule():
+    payload = request.json
+    data = load_data()
+    data["Light Schedule"] = {
+        "on": payload.get("on", "06:00"),
+        "off": payload.get("off", "22:00")
+    }
+    save_data(data)
+    return jsonify({"message": "Light schedule updated."})
+
 IS_DEV = os.environ.get("GROWPI_DEV", "0") == "1"
 
 if IS_DEV:
