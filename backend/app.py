@@ -10,6 +10,8 @@ import threading
 import time
 import smtplib
 from email.mime.text import MIMEText
+from kasa import SmartPlug
+import datetime
 
 app = Flask(__name__, static_folder='../frontend/dist')
 CORS(app)
@@ -46,13 +48,203 @@ def safe_read(sensor, method, error_msg):
     except Exception as e:
         return {"error": f"Read failed: {e}"}
 
+# --- Kasa Plug Status Caching ---
+plug_status_cache = {
+    "Fan": {"status": None, "timestamp": 0},
+    "Humidifier": {"status": None, "timestamp": 0},
+    "Light": {"status": None, "timestamp": 0}
+}
+PLUG_CACHE_SECONDS = 5  # Cache duration in seconds
+
+async def async_get_plug_status(ip):
+    try:
+        plug = SmartPlug(ip)
+        await plug.update()
+        return plug.is_on
+    except Exception:
+        return None
+
+def get_plug_status_cached(name, ip):
+    now = time.time()
+    cache = plug_status_cache.get(name)
+    if cache and (now - cache["timestamp"] < PLUG_CACHE_SECONDS):
+        return cache["status"]
+    # Query plug asynchronously and update cache
+    try:
+        status = asyncio.run(async_get_plug_status(ip))
+    except RuntimeError:
+        # If already in an event loop (rare in Flask), use create_task
+        loop = asyncio.get_event_loop()
+        status = loop.run_until_complete(async_get_plug_status(ip))
+    plug_status_cache[name] = {"status": status, "timestamp": now}
+    return status
+
+# --- Sensor Initialization ---
+IS_DEV = os.environ.get("GROWPI_DEV", "0") == "1"
+
+if IS_DEV:
+    temp_sensor, temp_error = None, "Temperature sensor not available (mocked)"
+    rh_sensor, rh_error = None, "Humidity sensor not available (mocked)"
+    wtemp_sensor, wtemp_error = None, "Water temperature sensor not available (mocked)"
+    ph_sensor, ph_error = None, "pH sensor not available (mocked)"
+else:
+    temp_sensor, temp_error = safe_init(temp.TemperatureSensor, name="temperature")
+    rh_sensor, rh_error = safe_init(rh.RHMeter, name="humidity")
+    wtemp_sensor, wtemp_error = safe_init(wtemp.WaterTemperatureSensor, name="water_temperature")
+    ph_cal = data.get("PH Calibration", {"slope": -5.6548, "intercept": 15.509})
+    ph_sensor, ph_error = safe_init(
+        ph.PHMeter,
+        pins["Water pH Sensor"],
+        ph_cal["slope"],
+        ph_cal["intercept"],
+        name="ph"
+    )
+
+# --- Background Thread for pH Monitoring ---
+def send_email(subject, body):
+    data = load_data()
+    email_settings = data.get("Email Settings", {})
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = email_settings.get("from_email", "")
+    msg['To'] = email_settings.get("to_email", "")
+
+    with smtplib.SMTP(email_settings.get("smtp_server", ""), int(email_settings.get("smtp_port", 587))) as server:
+        server.starttls()
+        server.login(email_settings.get("username", ""), email_settings.get("password", ""))
+        server.send_message(msg)
+
+def ph_monitor_loop():
+    while True:
+        try:
+            ph_value = safe_read(ph_sensor, "read_ph", ph_error or sensor_errors.get("ph", "pH sensor not available"))
+            data = load_data()
+            stage = data["State"]["Current Stage"]
+            ph_range = data["Ideal Ranges"][stage]["Water pH"]
+            min_ph = ph_range["min"]
+            max_ph = ph_range["max"]
+            if isinstance(ph_value, (int, float)) and (ph_value < min_ph or ph_value > max_ph):
+                send_email(
+                    subject="GrowPi Alert: pH Out of Range",
+                    body=f"Current pH is {ph_value:.2f}, which is outside the ideal range ({min_ph}-{max_ph}).",
+                    to_email=data.get("Email Settings", {}).get("to_email", "")
+                )
+        except Exception as e:
+            print(f"pH monitor error: {e}")
+        time.sleep(4 * 60 * 60)  # 4 hours
+
+threading.Thread(target=ph_monitor_loop, daemon=True).start()
+
+# --- Climate and Light Control ---
+
+def run_climate_and_light_control():
+    data = load_data()
+    stage = data["State"]["Current Stage"]
+    light_state = "Lights On"  # You may want to determine this based on schedule
+    ideal = data["Ideal Ranges"][stage]
+    kasa = data["Kasa configs"]
+    device_ips = kasa["Device_IPs"]
+    user = kasa["Username"]
+    pwd = kasa["Password"]
+
+    temp_val = safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available"))
+    rh_val = safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available"))
+
+    temp_range = ideal["Air Temperature"][light_state]
+    rh_range = ideal["Relative Humidity"]
+
+    actions = []
+
+    async def control_devices():
+        # --- Climate logic (same as your latest logic) ---
+        fan_on = False
+        humid_on = False
+
+        if temp_val > temp_range["max"] or rh_val > rh_range["max"]:
+            fan_on = True
+            humid_on = False
+            actions.append("Fan ON (temp or RH too high)")
+            actions.append("Humidifier OFF (RH too high or temp too high)")
+        elif temp_val < temp_range["min"] or rh_val < rh_range["min"]:
+            fan_on = False
+            humid_on = rh_val < rh_range["min"]
+            actions.append("Fan OFF (temp or RH too low)")
+            if humid_on:
+                actions.append("Humidifier ON (RH too low)")
+            else:
+                actions.append("Humidifier OFF (temp too low, RH ok)")
+        else:
+            fan_on = True
+            humid_on = False
+            actions.append("Fan ON (ideal conditions)")
+            actions.append("Humidifier OFF (ideal conditions)")
+
+        # Apply actions
+        if fan_on:
+            await plug.turnOn(device_ips["Fan"], user, pwd)
+        else:
+            await plug.turnOff(device_ips["Fan"], user, pwd)
+        if humid_on:
+            await plug.turnOn(device_ips["Humidifier"], user, pwd)
+        else:
+            await plug.turnOff(device_ips["Humidifier"], user, pwd)
+
+        # --- Light schedule logic ---
+        now = datetime.datetime.now().time()
+        light_sched = data.get("Light Schedule", {"on": "06:00", "off": "22:00"})
+        on_time = datetime.datetime.strptime(light_sched["on"], "%H:%M").time()
+        off_time = datetime.datetime.strptime(light_sched["off"], "%H:%M").time()
+
+        # Handle overnight schedules
+        if on_time < off_time:
+            light_should_be_on = on_time <= now < off_time
+        else:
+            light_should_be_on = now >= on_time or now < off_time
+
+        # Query current light state
+        try:
+            current_light_state = await async_get_plug_status(device_ips["Light"])
+        except Exception:
+            current_light_state = None
+
+        if light_should_be_on and not current_light_state:
+            await plug.turnOn(device_ips["Light"], user, pwd)
+            actions.append("Light ON (according to schedule)")
+        elif not light_should_be_on and current_light_state:
+            await plug.turnOff(device_ips["Light"], user, pwd)
+            actions.append("Light OFF (according to schedule)")
+        else:
+            actions.append(f"Light {'ON' if current_light_state else 'OFF'} (already correct)")
+
+    asyncio.run(control_devices())
+    return actions
+
+# Background thread to run every 5 minutes
+def climate_and_light_loop():
+    while True:
+        try:
+            actions = run_climate_and_light_control()
+            print(f"[{datetime.datetime.now()}] Climate/Light actions: {actions}")
+        except Exception as e:
+            print(f"Climate/Light control error: {e}")
+        time.sleep(5 * 60)
+
+threading.Thread(target=climate_and_light_loop, daemon=True).start()
+
+# --- Flask Routes ---
+
 @app.route('/api/status')
 def status():
+    data = load_data()
+    device_ips = data["Kasa configs"]["Device_IPs"]
     return jsonify({
         "temperature": safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available")),
         "humidity": safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available")),
         "ph": safe_read(ph_sensor, "read_ph", ph_error or sensor_errors.get("ph", "pH sensor not available")),
-        "wtemp": safe_read(wtemp_sensor, "read_temp", wtemp_error or sensor_errors.get("water_temperature", "Water temperature sensor not available"))
+        "wtemp": safe_read(wtemp_sensor, "read_temp", wtemp_error or sensor_errors.get("water_temperature", "Water temperature sensor not available")),
+        "fan_status": get_plug_status_cached("Fan", device_ips.get("Fan", "")),
+        "humidifier_status": get_plug_status_cached("Humidifier", device_ips.get("Humidifier", "")),
+        "light_status": get_plug_status_cached("Light", device_ips.get("Light", ""))
     })
 
 @app.route('/')
@@ -90,64 +282,10 @@ def get_meters():
 
 @app.route('/controls', methods=['POST'])
 def controls():
-    payload = request.json or {}
-    stage = payload.get("stage", "Vegetative")
-    light_state = payload.get("light_state", "Lights On")
-
-    data = load_data()
-    ideal = data["Ideal Ranges"][stage]
-    kasa = data["Kasa configs"]
-    device_ips = kasa["Device_IPs"]
-    user = kasa["Username"]
-    pwd = kasa["Password"]
-
+    actions = run_climate_and_light_control()
+    # You may want to return the latest sensor readings as well
     temp_val = safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available"))
     rh_val = safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available"))
-
-    # If either sensor failed, return error
-    if isinstance(temp_val, dict) or isinstance(rh_val, dict):
-        return jsonify({
-            "temperature": temp_val,
-            "humidity": rh_val,
-            "actions": ["Cannot control devices: sensor(s) unavailable."]
-        })
-
-    temp_range = ideal["Air Temperature"][light_state]
-    rh_range = ideal["Relative Humidity"]
-
-    actions = []
-
-    async def control_devices():
-        # Fan logic
-        if temp_val > temp_range["max"]:
-            await plug.turnOn(device_ips["Fan"], user, pwd)
-            actions.append("Fan ON (temp too high)")
-        elif temp_val < temp_range["min"]:
-            await plug.turnOff(device_ips["Fan"], user, pwd)
-            actions.append("Fan OFF (temp too low)")
-        else:
-            await plug.turnOff(device_ips["Fan"], user, pwd)
-            actions.append("Fan OFF (temp ideal)")
-
-        # Humidifier logic
-        if rh_val < rh_range["min"]:
-            await plug.turnOn(device_ips["Humidifier"], user, pwd)
-            actions.append("Humidifier ON (RH too low)")
-        elif rh_val > rh_range["max"]:
-            if temp_val > temp_range["min"]:
-                await plug.turnOn(device_ips["Fan"], user, pwd)
-                actions.append("Fan ON (RH too high, temp ok)")
-            else:
-                await plug.turnOff(device_ips["Fan"], user, pwd)
-                actions.append("Fan OFF (RH too high, temp too low)")
-            await plug.turnOff(device_ips["Humidifier"], user, pwd)
-            actions.append("Humidifier OFF (RH too high)")
-        else:
-            await plug.turnOff(device_ips["Humidifier"], user, pwd)
-            actions.append("Humidifier OFF (RH ideal)")
-
-    asyncio.run(control_devices())
-
     return jsonify({
         "temperature": temp_val,
         "humidity": rh_val,
@@ -318,61 +456,5 @@ def ph_calibration_point():
         save_data(data)
         return jsonify({"message": f"Calibration point saved. Please add one more point."})
 
-def send_email(subject, body):
-    data = load_data()
-    email_settings = data.get("Email Settings", {})
-    msg = MIMEText(body)
-    msg['Subject'] = subject
-    msg['From'] = email_settings.get("from_email", "")
-    msg['To'] = email_settings.get("to_email", "")
-
-    with smtplib.SMTP(email_settings.get("smtp_server", ""), int(email_settings.get("smtp_port", 587))) as server:
-        server.starttls()
-        server.login(email_settings.get("username", ""), email_settings.get("password", ""))
-        server.send_message(msg)
-
-def ph_monitor_loop():
-    while True:
-        # Read pH
-        ph_value = safe_read(ph_sensor, "read_ph", ph_error or sensor_errors.get("ph", "pH sensor not available"))
-        # Get ideal range from data.json
-        data = load_data()
-        stage = data["State"]["Current Stage"]
-        ph_range = data["Ideal Ranges"][stage]["Water pH"]
-        min_ph = ph_range["min"]
-        max_ph = ph_range["max"]
-
-        # If out of range, send email
-        if isinstance(ph_value, (int, float)) and (ph_value < min_ph or ph_value > max_ph):
-            send_email(
-                subject="GrowPi Alert: pH Out of Range",
-                body=f"Current pH is {ph_value:.2f}, which is outside the ideal range ({min_ph}-{max_ph}).",
-                to_email="your@email.com"
-            )
-        time.sleep(4 * 60 * 60)  # 4 hours
-
-# Start the background thread when the app starts
-threading.Thread(target=ph_monitor_loop, daemon=True).start()
-
-IS_DEV = os.environ.get("GROWPI_DEV", "0") == "1"
-
-if IS_DEV:
-    temp_sensor, temp_error = None, "Temperature sensor not available (mocked)"
-    rh_sensor, rh_error = None, "Humidity sensor not available (mocked)"
-    wtemp_sensor, wtemp_error = None, "Water temperature sensor not available (mocked)"
-    ph_sensor, ph_error = None, "pH sensor not available (mocked)"
-else:
-    temp_sensor, temp_error = safe_init(temp.TemperatureSensor, name="temperature")
-    rh_sensor, rh_error = safe_init(rh.RHMeter, name="humidity")
-    wtemp_sensor, wtemp_error = safe_init(wtemp.WaterTemperatureSensor, name="water_temperature")
-    ph_cal = data.get("PH Calibration", {"slope": -5.6548, "intercept": 15.509})
-    ph_sensor, ph_error = safe_init(
-        ph.PHMeter,
-        pins["Water pH Sensor"],
-        ph_cal["slope"],
-        ph_cal["intercept"],
-        name="ph"
-    )
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)

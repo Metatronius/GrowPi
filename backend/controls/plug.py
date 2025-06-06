@@ -1,5 +1,5 @@
 import asyncio
-from kasa import Discover
+from kasa import Discover, SmartPlug
 
 async def findDeviceIps(usern, pas):
     dev = await Discover.discover(username=str(usern), password=str(pas))
@@ -30,4 +30,12 @@ async def turnToggle(ip,usern,pas):
         await dev.turn_off()
     else:
         await dev.turn_on()
-    await dev.update
+    await dev.update()
+
+def get_plug_status(ip):
+    try:
+        plug = SmartPlug(ip)
+        asyncio.run(plug.update())
+        return plug.is_on
+    except Exception as e:
+        return False  # or None if you want to show "unknown"
