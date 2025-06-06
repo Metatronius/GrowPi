@@ -215,14 +215,19 @@ def set_kasa():
 @app.route('/find_kasa', methods=['GET'])
 def find_kasa():
     data = load_data()
-    fan_ip = plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Fan")
-    light_ip = plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Light")
-    humidifier_ip = plug.get_Device_IP(data["Kasa configs"]["Username"], data["Kasa configs"]["Password"], "Humidifier")
-    return jsonify({
-        "Fan": fan_ip,
-        "Light": light_ip,
-        "Humidifier": humidifier_ip
-    })
+    user = data["Kasa configs"]["Username"]
+    pwd = data["Kasa configs"]["Password"]
+    try:
+        fan_ip = asyncio.run(plug.get_Device_IP(user, pwd, "Fan"))
+        light_ip = asyncio.run(plug.get_Device_IP(user, pwd, "Light"))
+        humidifier_ip = asyncio.run(plug.get_Device_IP(user, pwd, "Humidifier"))
+        return jsonify({
+            "Fan": fan_ip,
+            "Light": light_ip,
+            "Humidifier": humidifier_ip
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/set_stage', methods=['POST'])
 def set_stage():

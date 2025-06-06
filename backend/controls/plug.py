@@ -1,21 +1,18 @@
 import asyncio
 from kasa import Discover
 
-async def findDiviceIp(usern,pas):
-    dev = await Discover.discover(username=str(usern),password=str(pas))
-    lis=[]
-    for devices in dev.values():
-        await devices.update()
-        lis.append(devices.host)
-    return lis
+async def findDeviceIps(usern, pas):
+    dev = await Discover.discover(username=str(usern), password=str(pas))
+    return [device.host for device in dev.values()]
 
-async def get_Device_IP(usern,pas,name):
-    lis =findDiviceIp(usern,pas)
-    for ip in lis:
+async def get_Device_IP(usern, pas, name):
+    ips = await findDeviceIps(usern, pas)
+    for ip in ips:
         device = await Discover.discover_single(str(ip), username=str(usern), password=str(pas))
+        await device.update()
         if device.alias == name:
             return ip
-        return None
+    return None
     
 async def turnOn(ip,usern,pas):
     dev = await Discover.discover_single(str(ip),username=str(usern),password=str(pas))
