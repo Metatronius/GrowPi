@@ -33,6 +33,71 @@ A web-based control panel for Raspberry Pi grow projects.
 - **Kasa Smart Plugs**: For controlling Fan, Humidifier, and Light (WiFi)
 
 ---
+## Project Structure
+
+```
+GrowPi/
+├── backend/
+│   ├── app.py
+│   ├── data.json
+│   ├── requirements.txt
+│   ├── controls/
+│   └── meters/
+├── frontend/
+│   ├── dist/
+│   ├── src/
+│   ├── index.html
+│   └── vite.config.js
+└── README.md
+```
+
+---
+
+## Hardware Setup
+
+- **HTU21D**: Connect to I2C pins (SDA/SCL) on the Pi.
+- **MCP3008**: Connect to SPI pins (MISO, MOSI, SCLK, CE0/CE1).
+- **DS18B20**: Connect to a GPIO pin (with pull-up resistor) or via MCP3008.
+- **pH Sensor**: Connect analog output to MCP3008 channel.
+- **Kasa Smart Plugs**: Set up via Kasa app, ensure on same WiFi as Pi.
+
+---
+
+## Scripts
+
+- **install.sh**: Automates backend/frontend setup and startup.
+- **restart.sh**: Restarts backend and frontend servers.
+
+---
+
+## Quick Install (Recommended)
+
+You can use the provided `install.sh` script to automate the entire setup process for both backend and frontend.
+
+### 1. Make the script executable
+
+```bash
+chmod +x install.sh
+```
+
+### 2. Run the installer
+
+```bash
+./install.sh
+```
+
+- The script will prompt you to specify if you are running on a Raspberry Pi with sensors attached.
+- It will set up the Python backend, Node.js frontend, install all dependencies, and start both servers in the background.
+- Logs will be saved as `backend.log` and `frontend.log` in the project directory.
+
+### 3. Access the Web UI
+
+- On your Pi: [http://localhost:5173](http://localhost:5173)
+- On another device: [http://"<your-pi-ip>":5173](http://<your-pi-ip>:5173)
+
+---
+
+**Manual installation steps are below if you prefer to set up each part yourself.**
 
 ## Installation (Step-by-Step)
 
@@ -126,75 +191,10 @@ npm run dev -- --host
 
 ---
 
-## Quick Install (Recommended)
-
-You can use the provided `install.sh` script to automate the entire setup process for both backend and frontend.
-
-### 1. Make the script executable
-
-```bash
-chmod +x install.sh
-```
-
-### 2. Run the installer
-
-```bash
-./install.sh
-```
-
-- The script will prompt you to specify if you are running on a Raspberry Pi with sensors attached.
-- It will set up the Python backend, Node.js frontend, install all dependencies, and start both servers in the background.
-- Logs will be saved as `backend.log` and `frontend.log` in the project directory.
-
-### 3. Access the Web UI
-
-- On your Pi: [http://localhost:5173](http://localhost:5173)
-- On another device: [http://<your-pi-ip>:5173](http://<your-pi-ip>:5173)
-
----
-
-**Manual installation steps are below if you prefer to set up each part yourself.**
-
-## Project Structure
-
-```
-GrowPi/
-├── backend/
-│   ├── app.py
-│   ├── data.json
-│   ├── requirements.txt
-│   ├── controls/
-│   └── meters/
-├── frontend/
-│   ├── dist/
-│   ├── src/
-│   ├── index.html
-│   └── vite.config.js
-└── README.md
-```
-
----
-
-## Hardware Setup
-
-- **HTU21D**: Connect to I2C pins (SDA/SCL) on the Pi.
-- **MCP3008**: Connect to SPI pins (MISO, MOSI, SCLK, CE0/CE1).
-- **DS18B20**: Connect to a GPIO pin (with pull-up resistor) or via MCP3008.
-- **pH Sensor**: Connect analog output to MCP3008 channel.
-- **Kasa Smart Plugs**: Set up via Kasa app, ensure on same WiFi as Pi.
-
----
-
-## Scripts
-
-- **install.sh**: Automates backend/frontend setup and startup.
-- **restart.sh**: Restarts backend and frontend servers.
-
----
 
 ## License
 
-MIT License
+GPL License
 
 ---
 
