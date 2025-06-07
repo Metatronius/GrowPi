@@ -4,11 +4,27 @@ set -e
 
 echo "=== GrowPi Automated Installer ==="
 
+# Check for Python 3.9+
+if ! python3 --version | grep -q "3.9"; then
+    echo "WARNING: Python 3.9+ is recommended. Detected: $(python3 --version)"
+fi
+
+# Check for Node.js and npm
+if ! command -v node >/dev/null 2>&1; then
+    echo "ERROR: Node.js is not installed. Please install Node.js v18+ and rerun this script."
+    exit 1
+fi
+if ! command -v npm >/dev/null 2>&1; then
+    echo "ERROR: npm is not installed. Please install npm and rerun this script."
+    exit 1
+fi
+
 # Backend setup
 echo "Setting up Python backend..."
 cd backend
 python3 -m venv venv
 source venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
 
 # Setup data.json from template if needed
@@ -72,6 +88,11 @@ if [[ "$is_pi" != "y" && "$is_pi" != "Y" ]]; then
 else
     pip install adafruit-circuitpython-htu21d w1thermsensor gpiozero python-kasa
 fi
+
+# Kill any running backend/frontend processes
+echo "Stopping any running backend/frontend servers..."
+pkill -f "python app.py" || true
+pkill -f "vite" || true
 
 echo "Starting backend server in the background..."
 nohup python app.py > ../backend.log 2>&1 &

@@ -6,12 +6,31 @@ A web-based control panel for Raspberry Pi grow projects.
 
 ---
 
+## Features
+
+- Real-time monitoring of temperature, humidity, water temperature, and pH
+- Automated control of fan, humidifier, and grow lights via Kasa smart plugs
+- Configurable ideal ranges for each grow stage
+- Light scheduling and pH calibration
+- Email/SMS notifications for out-of-range conditions
+- Modular, easy-to-extend codebase
+
+---
+
 ## Prerequisites
 
 - **Raspberry Pi** (recommended, required for GPIO and sensors)
 - **Python 3.9+**
 - **Node.js** (v18+ recommended) and **npm**
 - **git**
+
+### Hardware Sensors Used
+
+- **HTU21D**: Temperature & Humidity sensor (I2C)
+- **MCP3008**: 8-channel ADC for analog sensors (SPI)
+- **DS18B20**: Water temperature sensor (1-Wire) or analog sensor via MCP3008
+- **Analog pH Sensor**: Connected via MCP3008
+- **Kasa Smart Plugs**: For controlling Fan, Humidifier, and Light (WiFi)
 
 ---
 
@@ -156,3 +175,32 @@ GrowPi/
 
 ---
 
+## Hardware Setup
+
+- **HTU21D**: Connect to I2C pins (SDA/SCL) on the Pi.
+- **MCP3008**: Connect to SPI pins (MISO, MOSI, SCLK, CE0/CE1).
+- **DS18B20**: Connect to a GPIO pin (with pull-up resistor) or via MCP3008.
+- **pH Sensor**: Connect analog output to MCP3008 channel.
+- **Kasa Smart Plugs**: Set up via Kasa app, ensure on same WiFi as Pi.
+
+---
+
+## Scripts
+
+- **install.sh**: Automates backend/frontend setup and startup.
+- **restart.sh**: Restarts backend and frontend servers.
+
+---
+
+## License
+
+MIT License
+
+---
+
+## Credits
+
+- [Svelte](https://svelte.dev/)
+- [Flask](https://flask.palletsprojects.com/)
+- [python-kasa](https://python-kasa.readthedocs.io/)
+- [Adafruit CircuitPython HTU21D](https://github.com/adafruit/Adafruit_CircuitPython_HTU21D)
