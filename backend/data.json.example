@@ -31,9 +31,9 @@
         "target": 72.5
       },
       "Water Temperature": {
-        "min": 70,
-        "max": 75,
-        "target": 72.5
+        "min": 63,
+        "max": 72,
+        "target": 66
       },
       "Water pH": {
         "min": 5.0,
@@ -60,9 +60,9 @@
         "target": 60
       },
       "Water Temperature": {
-        "min": 70,
-        "max": 75,
-        "target": 72.5
+        "min": 63,
+        "max": 72,
+        "target": 66
       },
       "Water pH": {
         "min": 5.0,
@@ -89,13 +89,13 @@
         "target": 50
       },
       "Water Temperature": {
-        "min": 70,
-        "max": 75,
-        "target": 72.5
+        "min": 63,
+        "max": 72,
+        "target": 66
       },
       "Water pH": {
-        "min": 5,
-        "max": 6,
+        "min": 5.0,
+        "max": 6.0,
         "target": 5.5
       }
     },
@@ -111,6 +111,16 @@
         "min": 45,
         "max": 60,
         "target": 50
+      },
+      "Water Temperature": {
+        "min": 63,
+        "max": 72,
+        "target": 66
+      },
+      "Water pH": {
+        "min": 5.0,
+        "max": 6.0,
+        "target": 5.5
       }
     }
   },
@@ -156,7 +166,7 @@
     "to_email": ""
   },
   "Light Schedule": {
-    "on": "06:00",
-    "off": "22:00"
+    "on": "04:00",
+    "off": "16:00"
   }
 }
