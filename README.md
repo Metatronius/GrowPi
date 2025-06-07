@@ -29,7 +29,7 @@ A web-based control panel for Raspberry Pi grow projects.
 - **HTU21D**: Temperature & Humidity sensor (I2C)
 - **MCP3008**: 8-channel ADC for analog sensors (SPI)
 - **DS18B20**: Water temperature sensor (1-Wire) or analog sensor via MCP3008
-- **Analog pH Sensor**: Connected via MCP3008
+- **Analog pH Sensor**: Recommended to use the Atlas Scientific Surveyor Analog pH kit because it can be left in the resevoir. Connected via MCP3008
 - **Kasa Smart Plugs**: For controlling Fan, Humidifier, and Light (WiFi)
 
 ---
