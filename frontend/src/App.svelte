@@ -1,4 +1,3 @@
-
 <script>
   import { onMount } from 'svelte';
 
@@ -230,6 +229,7 @@
   <button on:click={() => menu = 'kasa'}>Kasa Config</button>
   <button on:click={() => menu = 'light'}>Light Schedule</button>
   <button on:click={() => menu = 'phcal'}>pH Calibration</button>
+  <button on:click={() => menu = 'email'}>Email Settings</button> <!-- Add this line -->
 </nav>
 <div style="margin-bottom: 2em;"></div>
 
