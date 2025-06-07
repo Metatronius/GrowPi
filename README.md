@@ -93,7 +93,7 @@ chmod +x install.sh
 ### 3. Access the Web UI
 
 - On your Pi: [http://localhost:5173](http://localhost:5173)
-- On another device: [http://"<your-pi-ip>":5173](http://<your-pi-ip>:5173)
+- On another device: http://<your-pi-ip>:5173
 
 ---
 
@@ -179,7 +179,7 @@ npm run dev -- --host
 ### 5. Access the Web UI
 
 - On your Pi: [http://localhost:5173](http://localhost:5173)
-- On another device: [http://<your-pi-ip>:5173](http://<your-pi-ip>:5173)
+- On another device: http://<your-pi-ip>:5173
 
 ---
 
