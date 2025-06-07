@@ -1,3 +1,4 @@
+
 <script>
   import { onMount } from 'svelte';
 
@@ -15,6 +16,8 @@
   let discoveredIPs = {};
   let lightOn = '';
   let lightOff = '';
+  let currentLightOn = '';
+  let currentLightOff = '';
   let phCal = { known_ph: '' };
   let phCalMsg = '';
   let emailSettings = {
@@ -101,8 +104,10 @@
   async function fetchLightSchedule() {
     const res = await fetch('/light_schedule');
     const sched = await res.json();
-    lightOn = sched.on || "06:00";
-    lightOff = sched.off || "22:00";
+    currentLightOn = sched.on || "06:00";
+    currentLightOff = sched.off || "22:00";
+    lightOn = currentLightOn;
+    lightOff = currentLightOff;
   }
 
   // Save the light schedule to the backend
@@ -113,6 +118,7 @@
       body: JSON.stringify({ on: lightOn, off: lightOff })
     });
     alert('Light schedule updated!');
+    fetchLightSchedule();
   }
 
   async function fetchPhCal() {
@@ -166,11 +172,14 @@
     fetchEmailSettings();
   });
 
-  // Optionally, fetch schedule when switching to the light tab
+  // Default selectedStage to current stage when switching to ranges tab
+  $: if (menu === 'ranges' && config["State"]?.["Current Stage"]) {
+    selectedStage = config["State"]["Current Stage"];
+  }
+  // Always fetch light schedule when switching to light tab
   $: if (menu === 'light') {
     fetchLightSchedule();
   }
-
   $: if (!selectedStage && Object.keys(config["Ideal Ranges"]).length > 0) {
     selectedStage = Object.keys(config["Ideal Ranges"])[0];
   }
@@ -204,16 +213,27 @@
     if (val === undefined || min === undefined || max === undefined) return 0;
     return Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
   }
+
+  function to12Hour(timeStr) {
+    if (!timeStr) return '';
+    const [hour, minute] = timeStr.split(':').map(Number);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = ((hour + 11) % 12 + 1);
+    return `${hour12}:${minute.toString().padStart(2, '0')} ${ampm}`;
+  }
 </script>
 
+<h1 style="text-align:center; margin-top:1em; margin-bottom:0.5em;">GrowPi Dashboard</h1>
 <nav>
   <button on:click={() => menu = 'status'}>Status</button>
   <button on:click={() => menu = 'ranges'}>Ideal Ranges</button>
   <button on:click={() => menu = 'kasa'}>Kasa Config</button>
   <button on:click={() => menu = 'light'}>Light Schedule</button>
-    <button on:click={() => menu = 'phcal'}>pH Calibration</button>
-  </nav>
-  {#if menu === 'status'}
+  <button on:click={() => menu = 'phcal'}>pH Calibration</button>
+</nav>
+<div style="margin-bottom: 2em;"></div>
+
+{#if menu === 'status'}
   {#if config["State"]?.["Current Stage"]}
     <!-- Air Temperature -->
     {#if lights}
@@ -453,99 +473,102 @@
   {/if}
 {/if}
 
-  {#if menu === 'ranges'}
-      <select bind:value={selectedStage}>
-        {#each stageOrder.filter(stage => config["Ideal Ranges"][stage]) as stage}
-          <option value={stage}>{stage}</option>
-        {/each}
-      </select>
-    {#if selectedStage}
-      {#each Object.entries(config["Ideal Ranges"][selectedStage]) as [meter, value]}
-        <fieldset>
-          <legend>{meter}</legend>
-          {#if typeof value === 'object' && value["Lights On"]}
-            <!-- Nested: Air Temperature -->
-            {#each Object.entries(value) as [subkey, subval]}
-              <fieldset>
-                <legend>{subkey}</legend>
-                <label>Min: <input type="number" bind:value={subval.min} step="any" /></label>
-                <label>Max: <input type="number" bind:value={subval.max} step="any" /></label>
-                <label>Target: <input type="number" bind:value={subval.target} step="any" /></label>
-                <button on:click={() => setRange(selectedStage, meter, subkey, subval)}>Set</button>
-              </fieldset>
-            {/each}
-          {:else}
-            <!-- Flat: Relative Humidity, Water Temperature, Water pH -->
-            <label>Min: <input type="number" bind:value={value.min} step="any" /></label>
-            <label>Max: <input type="number" bind:value={value.max} step="any" /></label>
-            <label>Target: <input type="number" bind:value={value.target} step="any" /></label>
-            <button on:click={() => setRange(selectedStage, meter, null, value)}>Set</button>
-          {/if}
-        </fieldset>
-      {/each}
-    {/if}
-  {/if}
-
-
-  {#if menu === 'kasa'}
-    <h2>Kasa Configuration</h2>
-    <label>Username: <input type="text" bind:value={config["Kasa configs"].Username} /></label>
-    <label>Password: <input type="password" bind:value={config["Kasa configs"].Password} /></label>
-    <h3>Device IPs</h3>
-    {#each Object.entries(config["Kasa configs"].Device_IPs) as [key, value]}
-      <label>{key}: <input type="text" bind:value={config["Kasa configs"].Device_IPs[key]} /></label>
+{#if menu === 'ranges'}
+  <select bind:value={selectedStage}>
+    {#each stageOrder.filter(stage => config["Ideal Ranges"][stage]) as stage}
+      <option value={stage}>{stage}</option>
     {/each}
-    <button on:click={setKasa}>Set Kasa Config</button>
-    <button on:click={findKasaDevices} disabled={findingKasa}>
-      {findingKasa ? 'Finding...' : 'Find Kasa Devices'}
-    </button>
-    {#if kasaError}
-      <div style="color: red;">{kasaError}</div>
-    {/if}
-    {#if Object.keys(discoveredIPs).length > 0}
-      <h4>Discovered Devices:</h4>
-      <ul>
-        {#each Object.entries(discoveredIPs) as [name, ip]}
-          <li>{name}: {ip}</li>
-        {/each}
-      </ul>
-    {/if}
+  </select>
+  {#if selectedStage}
+    {#each Object.entries(config["Ideal Ranges"][selectedStage]) as [meter, value]}
+      <fieldset>
+        <legend>{meter}</legend>
+        {#if typeof value === 'object' && value["Lights On"]}
+          <!-- Nested: Air Temperature -->
+          {#each Object.entries(value) as [subkey, subval]}
+            <fieldset>
+              <legend>{subkey}</legend>
+              <label>Min: <input type="number" bind:value={subval.min} step="any" /></label>
+              <label>Max: <input type="number" bind:value={subval.max} step="any" /></label>
+              <label>Target: <input type="number" bind:value={subval.target} step="any" /></label>
+              <button on:click={() => setRange(selectedStage, meter, subkey, subval)}>Set</button>
+            </fieldset>
+          {/each}
+        {:else}
+          <!-- Flat: Relative Humidity, Water Temperature, Water pH -->
+          <label>Min: <input type="number" bind:value={value.min} step="any" /></label>
+          <label>Max: <input type="number" bind:value={value.max} step="any" /></label>
+          <label>Target: <input type="number" bind:value={value.target} step="any" /></label>
+          <button on:click={() => setRange(selectedStage, meter, null, value)}>Set</button>
+        {/if}
+      </fieldset>
+    {/each}
   {/if}
+{/if}
 
-  {#if menu === 'light'}
-    <h2>Light Schedule</h2>
-    <form on:submit|preventDefault={saveLightSchedule}>
-      <label>
-        On Time:
-        <input type="time" bind:value={lightOn} required />
-      </label>
-      <label>
-        Off Time:
-        <input type="time" bind:value={lightOff} required />
-      </label>
-      <button type="submit">Save Schedule</button>
-    </form>
+{#if menu === 'kasa'}
+  <h2>Kasa Configuration</h2>
+  <label>Username: <input type="text" bind:value={config["Kasa configs"].Username} /></label>
+  <label>Password: <input type="password" bind:value={config["Kasa configs"].Password} /></label>
+  <h3>Device IPs</h3>
+  {#each Object.entries(config["Kasa configs"].Device_IPs) as [key, value]}
+    <label>{key}: <input type="text" bind:value={config["Kasa configs"].Device_IPs[key]} /></label>
+  {/each}
+  <button on:click={setKasa}>Set Kasa Config</button>
+  <button on:click={findKasaDevices} disabled={findingKasa}>
+    {findingKasa ? 'Finding...' : 'Find Kasa Devices'}
+  </button>
+  {#if kasaError}
+    <div style="color: red;">{kasaError}</div>
   {/if}
+  {#if Object.keys(discoveredIPs).length > 0}
+    <h4>Discovered Devices:</h4>
+    <ul>
+      {#each Object.entries(discoveredIPs) as [name, ip]}
+        <li>{name}: {ip}</li>
+      {/each}
+    </ul>
+  {/if}
+{/if}
 
-  {#if menu === 'phcal'}
-    <h2>pH Probe Calibration</h2>
-    <p>Step 1: Place the probe in a known pH solution (e.g., 4.00, 7.00, or 10.00).</p>
-    <input type="number" step="any" bind:value={phCal.known_ph} placeholder="Known pH value" />
-    <button on:click={addPhCalPoint}>Add Calibration Point</button>
-    {#if phCalMsg}
-      <div style="color: green;">{phCalMsg}</div>
-    {/if}
-  {/if}
+{#if menu === 'light'}
+  <h2>Light Schedule</h2>
+  <div style="margin-bottom:1em;">
+    <strong>Current Schedule:</strong>
+    On: {to12Hour(currentLightOn)} &nbsp; Off: {to12Hour(currentLightOff)}
+  </div>
+  <form on:submit|preventDefault={saveLightSchedule}>
+    <label>
+      On Time:
+      <input type="time" bind:value={lightOn} required />
+    </label>
+    <label>
+      Off Time:
+      <input type="time" bind:value={lightOff} required />
+    </label>
+    <button type="submit">Save Schedule</button>
+  </form>
+{/if}
 
-  {#if menu === 'email'}
-    <h2>Email Settings</h2>
-    <form on:submit|preventDefault={saveEmailSettings}>
-      <label>SMTP Server: <input type="text" bind:value={emailSettings.smtp_server} /></label>
-      <label>SMTP Port: <input type="number" bind:value={emailSettings.smtp_port} /></label>
-      <label>Username: <input type="text" bind:value={emailSettings.username} /></label>
-      <label>Password: <input type="password" bind:value={emailSettings.password} /></label>
-      <label>From Email: <input type="email" bind:value={emailSettings.from_email} /></label>
-      <label>To Email: <input type="email" bind:value={emailSettings.to_email} /></label>
-      <button type="submit">Save</button>
-    </form>
+{#if menu === 'phcal'}
+  <h2>pH Probe Calibration</h2>
+  <p>Step 1: Place the probe in a known pH solution (e.g., 4.00, 7.00, or 10.00).</p>
+  <input type="number" step="any" bind:value={phCal.known_ph} placeholder="Known pH value" />
+  <button on:click={addPhCalPoint}>Add Calibration Point</button>
+  {#if phCalMsg}
+    <div style="color: green;">{phCalMsg}</div>
   {/if}
+{/if}
+
+{#if menu === 'email'}
+  <h2>Email Settings</h2>
+  <form on:submit|preventDefault={saveEmailSettings}>
+    <label>SMTP Server: <input type="text" bind:value={emailSettings.smtp_server} /></label>
+    <label>SMTP Port: <input type="number" bind:value={emailSettings.smtp_port} /></label>
+    <label>Username: <input type="text" bind:value={emailSettings.username} /></label>
+    <label>Password: <input type="password" bind:value={emailSettings.password} /></label>
+    <label>From Email: <input type="email" bind:value={emailSettings.from_email} /></label>
+    <label>To Email: <input type="email" bind:value={emailSettings.to_email} /></label>
+    <button type="submit">Save</button>
+  </form>
+{/if}

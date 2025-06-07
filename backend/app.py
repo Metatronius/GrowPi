@@ -23,6 +23,7 @@ def load_data():
         return json.load(f)
 
 def save_data(data):
+    print("Saving data.json with Light Schedule:", data.get("Light Schedule"))
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -385,11 +386,12 @@ def get_light_schedule():
 
 @app.route('/light_schedule', methods=['POST'])
 def set_light_schedule():
+    print("Received POST to /light_schedule")
     payload = request.json
     data = load_data()
     data["Light Schedule"] = {
-        "on": payload.get("on", "06:00"),
-        "off": payload.get("off", "22:00")
+        "on": payload["on"],
+        "off": payload["off"]
     }
     save_data(data)
     return jsonify({"message": "Light schedule updated."})
