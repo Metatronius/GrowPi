@@ -38,47 +38,53 @@ if [ ! -f data.json ]; then
     fi
 fi
 
-# Prompt for Kasa config
-read -p "Enter your Kasa username (email) [leave blank to skip]: " kasa_user
-read -s -p "Enter your Kasa password [leave blank to skip]: " kasa_pass
-echo
-read -p "Enter IP address of Fan plug [leave blank to skip]: " fan_ip
-read -p "Enter IP address of Humidifier plug [leave blank to skip]: " humid_ip
-read -p "Enter IP address of Light plug [leave blank to skip]: " light_ip
+# Ask if user wants to configure Kasa switches
+read -p "Would you like to configure Kasa smart switches? (y/n): " use_kasa
+if [[ "$use_kasa" == "y" || "$use_kasa" == "Y" ]]; then
+    read -p "Enter your Kasa username (email) [leave blank to skip]: " kasa_user
+    read -s -p "Enter your Kasa password [leave blank to skip]: " kasa_pass
+    echo
 
-# Use jq to update data.json if available, else fallback to sed
-if command -v jq >/dev/null 2>&1; then
-    tmpfile=$(mktemp)
-    jq \
-    --arg user "$kasa_user" \
-    --arg pass "$kasa_pass" \
-    --arg fan "$fan_ip" \
-    --arg humid "$humid_ip" \
-    --arg light "$light_ip" \
-    '
-    if ($user != "") then .["Kasa configs"].Username = $user else . end |
-    if ($pass != "") then .["Kasa configs"].Password = $pass else . end |
-    if ($fan != "") then .["Kasa configs"].Device_IPs.Fan = $fan else . end |
-    if ($humid != "") then .["Kasa configs"].Device_IPs.Humidifier = $humid else . end |
-    if ($light != "") then .["Kasa configs"].Device_IPs.Light = $light else . end
-    ' data.json > "$tmpfile" && mv "$tmpfile" data.json
+    declare -A switches
+    declare -a switch_names=("Fan" "Humidifier" "Light" "Dehumidifier" "Heater")
+    for sw in "${switch_names[@]}"; do
+        read -p "Would you like to use a Kasa switch for $sw? (y/n): " use_sw
+        if [[ "$use_sw" == "y" || "$use_sw" == "Y" ]]; then
+            read -p "Enter IP address of $sw plug: " ip
+            switches[$sw]=$ip
+        fi
+    done
+
+    # Use jq to update data.json if available, else fallback to sed
+    if command -v jq >/dev/null 2>&1; then
+        tmpfile=$(mktemp)
+        jq_args=()
+        [[ -n "$kasa_user" ]] && jq_args+=(--arg user "$kasa_user")
+        [[ -n "$kasa_pass" ]] && jq_args+=(--arg pass "$kasa_pass")
+        jq_script='
+            . as $orig |
+            (if ($user != null and $user != "") then .["Kasa configs"].Username = $user else . end) |
+            (if ($pass != null and $pass != "") then .["Kasa configs"].Password = $pass else . end)
+        '
+        for sw in "${!switches[@]}"; do
+            jq_args+=(--arg "${sw,,}" "${switches[$sw]}")
+            jq_script+=" | (if (\$${sw,,} != null and \$${sw,,} != \"\") then .[\"Kasa configs\"].Device_IPs.${sw} = \$${sw,,} else . end)"
+        done
+        jq "${jq_args[@]}" "$jq_script" data.json > "$tmpfile" && mv "$tmpfile" data.json
+    else
+        # Fallback: naive sed replacement (will not add new fields if missing)
+        if [ -n "$kasa_user" ]; then
+            sed -i "s/\"Username\": \".*\"/\"Username\": \"$kasa_user\"/" data.json
+        fi
+        if [ -n "$kasa_pass" ]; then
+            sed -i "s/\"Password\": \".*\"/\"Password\": \"$kasa_pass\"/" data.json
+        fi
+        for sw in "${!switches[@]}"; do
+            sed -i "s/\"$sw\": \".*\"/\"$sw\": \"${switches[$sw]}\"/" data.json
+        done
+    fi
 else
-    # Fallback: naive sed replacement (will not add new fields if missing)
-    if [ -n "$kasa_user" ]; then
-        sed -i "s/\"Username\": \".*\"/\"Username\": \"$kasa_user\"/" data.json
-    fi
-    if [ -n "$kasa_pass" ]; then
-        sed -i "s/\"Password\": \".*\"/\"Password\": \"$kasa_pass\"/" data.json
-    fi
-    if [ -n "$fan_ip" ]; then
-        sed -i "s/\"Fan\": \".*\"/\"Fan\": \"$fan_ip\"/" data.json
-    fi
-    if [ -n "$humid_ip" ]; then
-        sed -i "s/\"Humidifier\": \".*\"/\"Humidifier\": \"$humid_ip\"/" data.json
-    fi
-    if [ -n "$light_ip" ]; then
-        sed -i "s/\"Light\": \".*\"/\"Light\": \"$light_ip\"/" data.json
-    fi
+    echo "Skipping Kasa switch configuration."
 fi
 
 read -p "Are you running on a Raspberry Pi with sensors attached? (y/n): " is_pi

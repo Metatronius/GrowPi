@@ -162,6 +162,24 @@
     alert('Email settings updated!');
   }
 
+  let newPlugType = "Fan";
+  let newPlugIP = "";
+
+  const plugTypes = ["Fan", "Humidifier", "Light", "Dehumidifier", "Heater"];
+
+  function addPlug() {
+    if (newPlugType && newPlugIP) {
+      config["Kasa configs"].Device_IPs[newPlugType] = newPlugIP;
+      newPlugIP = "";
+      setKasa();
+    }
+  }
+
+  function removePlug(name) {
+    delete config["Kasa configs"].Device_IPs[name];
+    setKasa();
+  }
+
   // Fetch data on mount
   onMount(() => {
     fetchConfig();
@@ -508,27 +526,39 @@
 
 {#if menu === 'kasa'}
   <h2>Kasa Configuration</h2>
-  <label>Username: <input type="text" bind:value={config["Kasa configs"].Username} /></label>
-  <label>Password: <input type="password" bind:value={config["Kasa configs"].Password} /></label>
+  <label>
+    Username:
+    <input type="text" bind:value={config["Kasa configs"].Username} />
+  </label>
+  <label>
+    Password:
+    <input type="password" bind:value={config["Kasa configs"].Password} />
+  </label>
+
   <h3>Device IPs</h3>
-  {#each Object.entries(config["Kasa configs"].Device_IPs) as [key, value]}
-    <label>{key}: <input type="text" bind:value={config["Kasa configs"].Device_IPs[key]} /></label>
-  {/each}
-  <button on:click={setKasa}>Set Kasa Config</button>
-  <button on:click={findKasaDevices} disabled={findingKasa}>
-    {findingKasa ? 'Finding...' : 'Find Kasa Devices'}
-  </button>
-  {#if kasaError}
-    <div style="color: red;">{kasaError}</div>
+  <ul>
+    {#each Object.entries(config["Kasa configs"].Device_IPs) as [name, ip]}
+      <li>
+        <strong>{name}:</strong>
+        <input type="text" bind:value={config["Kasa configs"].Device_IPs[name]} />
+        <button on:click={() => removePlug(name)}>Remove</button>
+      </li>
+    {/each}
+  </ul>
+
+  {#if plugTypes.filter(type => !(type in config["Kasa configs"].Device_IPs)).length > 0}
+    <div style="margin-top:1em;">
+      <select bind:value={newPlugType}>
+        {#each plugTypes.filter(type => !(type in config["Kasa configs"].Device_IPs)) as type}
+          <option value={type}>{type}</option>
+        {/each}
+      </select>
+      <input placeholder="Plug IP" bind:value={newPlugIP} />
+      <button on:click={addPlug} disabled={!newPlugType || !newPlugIP}>Add Plug</button>
+    </div>
   {/if}
-  {#if Object.keys(discoveredIPs).length > 0}
-    <h4>Discovered Devices:</h4>
-    <ul>
-      {#each Object.entries(discoveredIPs) as [name, ip]}
-        <li>{name}: {ip}</li>
-      {/each}
-    </ul>
-  {/if}
+
+  <button on:click={setKasa}>Save Kasa Config</button>
 {/if}
 
 {#if menu === 'light'}

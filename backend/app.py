@@ -141,7 +141,7 @@ threading.Thread(target=ph_monitor_loop, daemon=True).start()
 def run_climate_and_light_control():
     data = load_data()
     stage = data["State"]["Current Stage"]
-    light_state = "Lights On"  # You may want to determine this based on schedule
+    light_state = "Lights On"  # Or determine based on schedule
     ideal = data["Ideal Ranges"][stage]
     kasa = data["Kasa configs"]
     device_ips = kasa["Device_IPs"]
@@ -157,10 +157,12 @@ def run_climate_and_light_control():
     actions = []
 
     async def control_devices():
-        # --- Climate logic (same as your latest logic) ---
         fan_on = False
         humid_on = False
+        dehumid_on = False
+        heater_on = False
 
+        # --- Fan and Humidifier logic (existing) ---
         if temp_val > temp_range["max"] or rh_val > rh_range["max"]:
             fan_on = True
             humid_on = False
@@ -180,15 +182,53 @@ def run_climate_and_light_control():
             actions.append("Fan ON (ideal conditions)")
             actions.append("Humidifier OFF (ideal conditions)")
 
-        # Apply actions
-        if fan_on:
-            await plug.turnOn(device_ips["Fan"], user, pwd)
-        else:
-            await plug.turnOff(device_ips["Fan"], user, pwd)
-        if humid_on:
-            await plug.turnOn(device_ips["Humidifier"], user, pwd)
-        else:
-            await plug.turnOff(device_ips["Humidifier"], user, pwd)
+        # --- Dehumidifier logic ---
+        # Turn ON if humidity > max, OFF if <= target
+        if "Dehumidifier" in device_ips:
+            if rh_val > rh_range["max"]:
+                dehumid_on = True
+                actions.append("Dehumidifier ON (RH too high)")
+            elif rh_val <= rh_range["target"]:
+                dehumid_on = False
+                actions.append("Dehumidifier OFF (RH at/below target)")
+            else:
+                # Maintain previous state (optional)
+                actions.append("Dehumidifier state unchanged")
+
+        # --- Heater logic ---
+        # Turn ON if temp < min, OFF if >= target
+        if "Heater" in device_ips:
+            if temp_val < temp_range["min"]:
+                heater_on = True
+                actions.append("Heater ON (temp too low)")
+            elif temp_val >= temp_range["target"]:
+                heater_on = False
+                actions.append("Heater OFF (temp at/above target)")
+            else:
+                # Maintain previous state (optional)
+                actions.append("Heater state unchanged")
+
+        # --- Apply actions to plugs ---
+        if "Fan" in device_ips:
+            if fan_on:
+                await plug.turnOn(device_ips["Fan"], user, pwd)
+            else:
+                await plug.turnOff(device_ips["Fan"], user, pwd)
+        if "Humidifier" in device_ips:
+            if humid_on:
+                await plug.turnOn(device_ips["Humidifier"], user, pwd)
+            else:
+                await plug.turnOff(device_ips["Humidifier"], user, pwd)
+        if "Dehumidifier" in device_ips:
+            if dehumid_on:
+                await plug.turnOn(device_ips["Dehumidifier"], user, pwd)
+            else:
+                await plug.turnOff(device_ips["Dehumidifier"], user, pwd)
+        if "Heater" in device_ips:
+            if heater_on:
+                await plug.turnOn(device_ips["Heater"], user, pwd)
+            else:
+                await plug.turnOff(device_ips["Heater"], user, pwd)
 
         # --- Light schedule logic ---
         now = datetime.datetime.now().time()
