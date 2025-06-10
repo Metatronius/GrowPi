@@ -211,7 +211,11 @@
   $: currentStage = config["State"]?.["Current Stage"];
   $: air = currentStage && config["Ideal Ranges"][currentStage]?.["Air Temperature"];
   $: lights = air && (air["Lights On"] || air["Lights Off"] || air);
-  $: hum = currentStage && config["Ideal Ranges"][currentStage]?.["Relative Humidity"];
+  $: hum = currentStage && (
+    config.Units["Humidity Metric"] === "VPD"
+      ? config["Ideal Ranges"][currentStage]?.["VPD"]
+      : config["Ideal Ranges"][currentStage]?.["Relative Humidity"]
+  );
   $: wtemp = currentStage && config["Ideal Ranges"][currentStage]?.["Water Temperature"];
   $: ph = currentStage && config["Ideal Ranges"][currentStage]?.["Water pH"];
 
@@ -238,6 +242,18 @@
     const hour12 = ((hour + 11) % 12 + 1);
     return `${hour12}:${minute.toString().padStart(2, '0')} ${ampm}`;
   }
+
+  // Save units and display settings to backend
+  async function saveUnits() {
+    await fetch('/set_units', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config.Units)
+    });
+    alert('Units and display settings updated!');
+    await fetchConfig();
+    await getStatus();
+  }
 </script>
 
 <h1 style="text-align:center; margin-top:1em; margin-bottom:0.5em;">GrowPi Dashboard</h1>
@@ -247,7 +263,8 @@
   <button on:click={() => menu = 'kasa'}>Kasa Config</button>
   <button on:click={() => menu = 'light'}>Light Schedule</button>
   <button on:click={() => menu = 'phcal'}>pH Calibration</button>
-  <button on:click={() => menu = 'email'}>Email Settings</button> <!-- Add this line -->
+  <button on:click={() => menu = 'email'}>Email Settings</button>
+  <button on:click={() => menu = 'units'}>Units</button> 
 </nav>
 <div style="margin-bottom: 2em;"></div>
 
@@ -290,9 +307,12 @@
         </div>
         <strong>Air Temperature:</strong>
         <span style="color: {readingColor(status.temperature, lights.target, lights.min, lights.max)}">
-          {status.temperature !== undefined ? status.temperature.toFixed(2) : ''}°F
+          {status.temperature !== undefined ? Number(status.temperature).toFixed(2) : ''}°{config.Units.Temperature}
         </span>
-        <small>Target: {lights.target}°F (Range: {lights.min}–{lights.max})</small>
+        <small>
+          Target: {lights.target}°{config.Units.Temperature}
+          (Range: {lights.min}–{lights.max}°{config.Units.Temperature})
+        </small>
       </div>
     {/if}
 
@@ -331,11 +351,15 @@
             </div>
           {/if}
         </div>
-        <strong>Humidity:</strong>
-        <span style="color: {readingColor(status.humidity, hum.target, hum.min, hum.max)}">
-          {status.humidity !== undefined ? status.humidity.toFixed(2) : ''}%
+        <strong>{config.Units["Humidity Metric"] === "VPD" ? "VPD" : "Humidity"}:</strong>
+        <span>
+          {status.humidity !== undefined ? status.humidity.toFixed(2) : ''}
+          {config.Units["Humidity Metric"] === "VPD" ? " kPa" : "%"}
         </span>
-        <small>Target: {hum.target}% (Range: {hum.min}–{hum.max})</small>
+        <small>
+          Target: {hum.target}{config.Units["Humidity Metric"] === "VPD" ? " kPa" : "%"}
+          (Range: {hum.min}–{hum.max}{config.Units["Humidity Metric"] === "VPD" ? " kPa" : "%"})
+        </small>
       </div>
     {/if}
 
@@ -378,7 +402,10 @@
         <span style="color: {readingColor(status.wtemp, wtemp.target, wtemp.min, wtemp.max)}">
           {status.wtemp !== undefined ? status.wtemp.toFixed(2) : ''}°F
         </span>
-        <small>Target: {wtemp.target}°F (Range: {wtemp.min}–{wtemp.max})</small>
+        <small>
+          Target: {wtemp.target}°{config.Units.Temperature}
+          (Range: {wtemp.min}–{wtemp.max}°{config.Units.Temperature})
+        </small>
       </div>
     {/if}
 
@@ -565,7 +592,7 @@
   <h2>Light Schedule</h2>
   <div style="margin-bottom:1em;">
     <strong>Current Schedule:</strong>
-    On: {to12Hour(currentLightOn)} &nbsp; Off: {to12Hour(currentLightOff)}
+    On: {status.light_on} &nbsp; Off: {status.light_off}
   </div>
   <form on:submit|preventDefault={saveLightSchedule}>
     <label>
@@ -599,6 +626,34 @@
     <label>Password: <input type="password" bind:value={emailSettings.password} /></label>
     <label>From Email: <input type="email" bind:value={emailSettings.from_email} /></label>
     <label>To Email: <input type="email" bind:value={emailSettings.to_email} /></label>
+    <button type="submit">Save</button>
+  </form>
+{/if}
+
+{#if menu === 'units'}
+  <h2>Units & Display Settings</h2>
+  <form on:submit|preventDefault={saveUnits}>
+    <label>
+      Temperature Unit:
+      <select bind:value={config.Units.Temperature}>
+        <option value="F">Fahrenheit (°F)</option>
+        <option value="C">Celsius (°C)</option>
+      </select>
+    </label>
+    <label>
+      Time Format:
+      <select bind:value={config.Units.Time}>
+        <option value="12h">12-hour (AM/PM)</option>
+        <option value="24h">24-hour</option>
+      </select>
+    </label>
+    <label>
+      Humidity Metric:
+      <select bind:value={config.Units["Humidity Metric"]}>
+        <option value="RH">Relative Humidity (%)</option>
+        <option value="VPD">Vapor Pressure Deficit (kPa)</option>
+      </select>
+    </label>
     <button type="submit">Save</button>
   </form>
 {/if}

@@ -12,6 +12,7 @@ import smtplib
 from email.mime.text import MIMEText
 from kasa import SmartPlug
 import datetime
+import math
 
 app = Flask(__name__, static_folder='../frontend/dist')
 CORS(app)
@@ -148,51 +149,60 @@ def run_climate_and_light_control():
     user = kasa["Username"]
     pwd = kasa["Password"]
 
+    units = data.get("Units", {})
+    humidity_metric = units.get("Humidity Metric", "RH")
+    temp_unit = units.get("Temperature", "F")
+
     temp_val = safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available"))
     rh_val = safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available"))
 
     temp_range = ideal["Air Temperature"][light_state]
-    rh_range = ideal["Relative Humidity"]
+
+    # --- NEW: Use VPD or RH for humidity control ---
+    if humidity_metric == "VPD" and isinstance(temp_val, (int, float)) and isinstance(rh_val, (int, float)):
+        temp_c = temp_val if temp_unit == "C" else to_celsius(temp_val)
+        humidity_val = calculate_vpd(temp_c, rh_val)
+        hum_range = ideal.get("VPD", {"min": 0.8, "max": 1.2, "target": 1.0})
+    else:
+        humidity_val = rh_val
+        hum_range = ideal.get("Relative Humidity", {"min": 40, "max": 60, "target": 50})
 
     actions = []
 
     async def control_devices():
-        fan_on = False
+        fan_on = True  # Default: keep fan ON
         humid_on = False
         dehumid_on = False
         heater_on = False
 
-        # --- Fan and Humidifier logic (existing) ---
-        if temp_val > temp_range["max"] or rh_val > rh_range["max"]:
-            fan_on = True
-            humid_on = False
-            actions.append("Fan ON (temp or RH too high)")
-            actions.append("Humidifier OFF (RH too high or temp too high)")
-        elif temp_val < temp_range["min"] or rh_val < rh_range["min"]:
+        # Turn fan OFF only if temp or humidity are too low
+        if temp_val < temp_range["min"] or humidity_val < hum_range["min"]:
             fan_on = False
-            humid_on = rh_val < rh_range["min"]
-            actions.append("Fan OFF (temp or RH too low)")
-            if humid_on:
-                actions.append("Humidifier ON (RH too low)")
-            else:
-                actions.append("Humidifier OFF (temp too low, RH ok)")
+            actions.append("Fan OFF (temp or humidity too low)")
         else:
             fan_on = True
+            actions.append("Fan ON (preferred or ideal conditions)")
+
+        # Humidifier logic (unchanged)
+        if temp_val < temp_range["min"] or humidity_val < hum_range["min"]:
+            humid_on = humidity_val < hum_range["min"]
+            if humid_on:
+                actions.append("Humidifier ON (humidity too low)")
+            else:
+                actions.append("Humidifier OFF (temp too low, humidity ok)")
+        else:
             humid_on = False
-            actions.append("Fan ON (ideal conditions)")
-            actions.append("Humidifier OFF (ideal conditions)")
+            actions.append("Humidifier OFF (ideal or high conditions)")
 
         # --- Dehumidifier logic ---
-        # Turn ON if humidity > max, OFF if <= target
         if "Dehumidifier" in device_ips:
-            if rh_val > rh_range["max"]:
+            if humidity_val > hum_range["max"]:
                 dehumid_on = True
-                actions.append("Dehumidifier ON (RH too high)")
-            elif rh_val <= rh_range["target"]:
+                actions.append("Dehumidifier ON (humidity too high)")
+            elif humidity_val <= hum_range["target"]:
                 dehumid_on = False
-                actions.append("Dehumidifier OFF (RH at/below target)")
+                actions.append("Dehumidifier OFF (humidity at/below target)")
             else:
-                # Maintain previous state (optional)
                 actions.append("Dehumidifier state unchanged")
 
         # --- Heater logic ---
@@ -205,7 +215,6 @@ def run_climate_and_light_control():
                 heater_on = False
                 actions.append("Heater OFF (temp at/above target)")
             else:
-                # Maintain previous state (optional)
                 actions.append("Heater state unchanged")
 
         # --- Apply actions to plugs ---
@@ -272,20 +281,80 @@ def climate_and_light_loop():
 
 threading.Thread(target=climate_and_light_loop, daemon=True).start()
 
+# --- Utility Functions ---
+
+def to_celsius(f):
+    return (f - 32) * 5.0 / 9.0
+
+def to_24h(time_str):
+    # Already in 24h format, just return
+    return time_str
+
+def to_12h(time_str):
+    hour, minute = map(int, time_str.split(":"))
+    ampm = "AM" if hour < 12 else "PM"
+    hour12 = hour % 12 or 12
+    return f"{hour12}:{minute:02d} {ampm}"
+
+def calculate_vpd(temp_c, rh):
+    svp = 0.61078 * math.exp(17.27 * temp_c / (temp_c + 237.3))
+    avp = svp * (rh / 100.0)
+    vpd = svp - avp
+    return round(vpd, 3)
+
 # --- Flask Routes ---
 
 @app.route('/api/status')
 def status():
     data = load_data()
     device_ips = data["Kasa configs"]["Device_IPs"]
+    units = data.get("Units", {})
+    temp_unit = units.get("Temperature", "F")
+    time_unit = units.get("Time", "12h")
+    humidity_metric = units.get("Humidity Metric", "RH")
+    stage = data["State"].get("Current Stage")
+    ideal = data["Ideal Ranges"].get(stage, {}) if stage else {}
+
+    temp_val = safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available"))
+    rh_val = safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available"))
+    wtemp_val = safe_read(wtemp_sensor, "read_temp", wtemp_error or sensor_errors.get("water_temperature", "Water temperature sensor not available"))
+
+    # Convert temperature if needed
+    if temp_unit == "C" and isinstance(temp_val, (int, float)):
+        temp_val = round(to_celsius(temp_val), 2)
+    if temp_unit == "C" and isinstance(wtemp_val, (int, float)):
+        wtemp_val = round(to_celsius(wtemp_val), 2)
+
+    # Calculate VPD if needed
+    if humidity_metric == "VPD" and isinstance(temp_val, (int, float)) and isinstance(rh_val, (int, float)):
+        temp_c = temp_val if temp_unit == "C" else to_celsius(temp_val)
+        humidity_val = calculate_vpd(temp_c, rh_val)
+        hum_range = ideal.get("VPD", {"min": 0.8, "max": 1.2, "target": 1.0})
+    else:
+        humidity_val = rh_val
+        hum_range = ideal.get("Relative Humidity", {"min": 40, "max": 60, "target": 50})
+
+    # Light schedule formatting
+    light_sched = data.get("Light Schedule", {"on": "06:00", "off": "22:00"})
+    if time_unit == "24h":
+        light_on = light_sched["on"]
+        light_off = light_sched["off"]
+    else:
+        light_on = to_12h(light_sched["on"])
+        light_off = to_12h(light_sched["off"])
+
     return jsonify({
-        "temperature": safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available")),
-        "humidity": safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available")),
+        "temperature": temp_val,
+        "humidity": humidity_val,
+        "humidity_metric": humidity_metric,
+        "hum_range": hum_range,
         "ph": safe_read(ph_sensor, "read_ph", ph_error or sensor_errors.get("ph", "pH sensor not available")),
-        "wtemp": safe_read(wtemp_sensor, "read_temp", wtemp_error or sensor_errors.get("water_temperature", "Water temperature sensor not available")),
+        "wtemp": wtemp_val,
         "fan_status": get_plug_status_cached("Fan", device_ips.get("Fan", "")),
         "humidifier_status": get_plug_status_cached("Humidifier", device_ips.get("Humidifier", "")),
-        "light_status": get_plug_status_cached("Light", device_ips.get("Light", ""))
+        "light_status": get_plug_status_cached("Light", device_ips.get("Light", "")),
+        "light_on": light_on,
+        "light_off": light_off
     })
 
 @app.route('/')
@@ -497,6 +566,56 @@ def ph_calibration_point():
     else:
         save_data(data)
         return jsonify({"message": f"Calibration point saved. Please add one more point."})
+
+@app.route('/set_units', methods=['POST'])
+def set_units():
+    units = request.json
+    data = load_data()
+    prev_units = data.get("Units", {})
+    # Convert temperature ranges if unit changed
+    if "Temperature" in units and units["Temperature"] != prev_units.get("Temperature"):
+        from_F = units["Temperature"] == "C" and prev_units.get("Temperature") == "F"
+        from_C = units["Temperature"] == "F" and prev_units.get("Temperature") == "C"
+        for stage, meters in data.get("Ideal Ranges", {}).items():
+            for meter, value in meters.items():
+                # Handle nested (e.g. Air Temperature with Lights On/Off)
+                if isinstance(value, dict) and "min" in value and "max" in value and "target" in value:
+                    if from_F:
+                        value["min"] = round((value["min"] - 32) * 5/9, 2)
+                        value["max"] = round((value["max"] - 32) * 5/9, 2)
+                        value["target"] = round((value["target"] - 32) * 5/9, 2)
+                    elif from_C:
+                        value["min"] = round(value["min"] * 9/5 + 32, 2)
+                        value["max"] = round(value["max"] * 9/5 + 32, 2)
+                        value["target"] = round(value["target"] * 9/5 + 32, 2)
+                # Handle Air Temperature with Lights On/Off
+                elif isinstance(value, dict):
+                    for subkey, subval in value.items():
+                        if isinstance(subval, dict) and "min" in subval and "max" in subval and "target" in subval:
+                            if from_F:
+                                subval["min"] = round((subval["min"] - 32) * 5/9, 2)
+                                subval["max"] = round((subval["max"] - 32) * 5/9, 2)
+                                subval["target"] = round((subval["target"] - 32) * 5/9, 2)
+                            elif from_C:
+                                subval["min"] = round(subval["min"] * 9/5 + 32, 2)
+                                subval["max"] = round(subval["max"] * 9/5 + 32, 2)
+                                subval["target"] = round(subval["target"] * 9/5 + 32, 2)
+    # Convert light schedule if time format changed
+    if "Time" in units and units["Time"] != prev_units.get("Time"):
+        sched = data.get("Light Schedule", {})
+        if "on" in sched and "off" in sched:
+            if units["Time"] == "24h":
+                # Convert from 12h to 24h
+                sched["on"] = to_24h(sched["on"])
+                sched["off"] = to_24h(sched["off"])
+            else:
+                # Convert from 24h to 12h
+                sched["on"] = to_12h(sched["on"])
+                sched["off"] = to_12h(sched["off"])
+            data["Light Schedule"] = sched
+    data["Units"] = units
+    save_data(data)
+    return jsonify({"message": "Units updated and config converted."})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
