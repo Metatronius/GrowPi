@@ -395,7 +395,7 @@
         </div>
         <strong>Water Temperature:</strong>
         <span style="color: {readingColor(status.wtemp, wtemp.target, wtemp.min, wtemp.max)}">
-          {status.wtemp !== undefined ? status.wtemp.toFixed(2) : ''}°F
+          {status.wtemp !== undefined ? status.wtemp.toFixed(2) : ''}°{config.Units.Temperature}
         </span>
         <small>
           Target: {wtemp.target}°{config.Units.Temperature}
