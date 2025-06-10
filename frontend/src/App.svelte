@@ -441,7 +441,7 @@
         </div>
         <strong>Water pH:</strong>
         <span style="color: {readingColor(status.ph, ph.target, ph.min, ph.max)}">
-          {status.ph !== undefined ? status.ph : ''}
+          {status.ph !== undefined ? Number(status.ph).toFixed(2) : ''}
         </span>
         <small>Target: {ph.target} (Range: {ph.min}–{ph.max})</small>
       </div>

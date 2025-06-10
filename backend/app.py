@@ -529,6 +529,7 @@ def set_ph_calibration():
 
 @app.route('/ph_calibration_point', methods=['POST'])
 def ph_calibration_point():
+    global ph_sensor, ph_error
     payload = request.json
     known_ph = payload.get("known_ph")
     data = load_data()
@@ -546,7 +547,6 @@ def ph_calibration_point():
         data["PH Calibration"] = {"type": "linear", "slope": slope, "intercept": intercept}
         data["PH Calibration Points"] = []
         save_data(data)
-        global ph_sensor, ph_error
         ph_sensor, ph_error = safe_init(
             ph.PHMeter,
             pins["Water pH Sensor"],
@@ -566,7 +566,6 @@ def ph_calibration_point():
         data["PH Calibration"] = {"type": "quadratic", "a": a, "b": b, "c": c}
         data["PH Calibration Points"] = []
         save_data(data)
-        global ph_sensor, ph_error
         ph_sensor, ph_error = safe_init(
             ph.PHMeter,
             pins["Water pH Sensor"],
