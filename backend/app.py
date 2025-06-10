@@ -75,7 +75,6 @@ def get_plug_status_cached(name, ip):
     try:
         status = asyncio.run(async_get_plug_status(ip))
     except RuntimeError:
-        # If already in an event loop (rare in Flask), use create_task
         loop = asyncio.get_event_loop()
         status = loop.run_until_complete(async_get_plug_status(ip))
     plug_status_cache[name] = {"status": status, "timestamp": now}
@@ -158,7 +157,6 @@ def run_climate_and_light_control():
 
     temp_range = ideal["Air Temperature"][light_state]
 
-    # --- NEW: Use VPD or RH for humidity control ---
     if humidity_metric == "VPD" and isinstance(temp_val, (int, float)) and isinstance(rh_val, (int, float)):
         temp_c = temp_val if temp_unit == "C" else to_celsius(temp_val)
         humidity_val = calculate_vpd(temp_c, rh_val)
@@ -287,7 +285,6 @@ def to_celsius(f):
     return (f - 32) * 5.0 / 9.0
 
 def to_24h(time_str):
-    # Already in 24h format, just return
     return time_str
 
 def to_12h(time_str):
@@ -393,7 +390,6 @@ def get_meters():
 @app.route('/controls', methods=['POST'])
 def controls():
     actions = run_climate_and_light_control()
-    # You may want to return the latest sensor readings as well
     temp_val = safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available"))
     rh_val = safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available"))
     return jsonify({
@@ -434,7 +430,6 @@ def set_pins():
         if sensor in data["Sensor Pins"]:
             data["Sensor Pins"][sensor] = pin
     save_data(data)
-    # Re-initialize sensors with new pins
     pins = data["Sensor Pins"]
     global temp_sensor, rh_sensor, wtemp_sensor, ph_sensor, temp_error, rh_error, wtemp_error, ph_error
     sensor_errors.clear()
@@ -538,22 +533,19 @@ def ph_calibration_point():
     known_ph = payload.get("known_ph")
     data = load_data()
     pins = data["Sensor Pins"]
-    # Read voltage from probe
     ph_adc = MCP3008(channel=pins["Water pH Sensor"])
     voltage = ph_adc.value * 3.3
-    # Store calibration points in data.json
     cal_points = data.setdefault("PH Calibration Points", [])
     cal_points.append({"ph": known_ph, "voltage": voltage})
-    # If we have two points, calculate slope/intercept
+
     if len(cal_points) == 2:
+        # Linear calibration (2-point)
         p1, p2 = cal_points
-        # slope = (ph2 - ph1) / (v2 - v1)
-        slope = (p2["ph"] - p1["ph"]) / (p2["voltage"] - p1["voltage"])
+        slope = (p1["ph"] - p2["ph"]) / (p1["voltage"] - p2["voltage"])
         intercept = p1["ph"] - slope * p1["voltage"]
-        data["PH Calibration"] = {"slope": slope, "intercept": intercept}
-        data["PH Calibration Points"] = []  # Clear after use
+        data["PH Calibration"] = {"type": "linear", "slope": slope, "intercept": intercept}
+        data["PH Calibration Points"] = []
         save_data(data)
-        # Re-initialize pH sensor with new calibration
         global ph_sensor, ph_error
         ph_sensor, ph_error = safe_init(
             ph.PHMeter,
@@ -562,11 +554,31 @@ def ph_calibration_point():
             intercept,
             name="ph"
         )
-        return jsonify({"message": f"Calibration complete! Slope: {slope:.4f}, Intercept: {intercept:.4f}"})
+        return jsonify({"message": f"2-point calibration complete! Slope: {slope:.4f}, Intercept: {intercept:.4f}"})
+    elif len(cal_points) == 3:
+        # Quadratic calibration (3-point)
+        import numpy as np
+        v = np.array([p["voltage"] for p in cal_points])
+        phs = np.array([p["ph"] for p in cal_points])
+        # Fit quadratic: ph = a*v^2 + b*v + c
+        coeffs = np.polyfit(v, phs, 2)
+        a, b, c = coeffs
+        data["PH Calibration"] = {"type": "quadratic", "a": a, "b": b, "c": c}
+        data["PH Calibration Points"] = []
+        save_data(data)
+        global ph_sensor, ph_error
+        ph_sensor, ph_error = safe_init(
+            ph.PHMeter,
+            pins["Water pH Sensor"],
+            a,
+            b,
+            c,
+            name="ph"
+        )
+        return jsonify({"message": f"3-point calibration complete! a: {a:.6f}, b: {b:.6f}, c: {c:.6f}"})
     else:
         save_data(data)
-        return jsonify({"message": f"Calibration point saved. Please add one more point."})
-
+        return jsonify({"message": f"Calibration point saved. Please add {2 - len(cal_points) if len(cal_points) < 2 else 3 - len(cal_points)} more point(s)."})
 @app.route('/set_units', methods=['POST'])
 def set_units():
     units = request.json

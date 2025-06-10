@@ -17,8 +17,9 @@
   let lightOff = '';
   let currentLightOn = '';
   let currentLightOff = '';
-  let phCal = { known_ph: '' };
+  let phCal = {};
   let phCalMsg = '';
+  let phCalPoints = [];
   let emailSettings = {
     smtp_server: "",
     smtp_port: 587,
@@ -123,29 +124,23 @@
   async function fetchPhCal() {
     const res = await fetch('/ph_calibration');
     phCal = await res.json();
+    // Fetch calibration points for progress
+    const configRes = await fetch('/get');
+    const configData = await configRes.json();
+    phCalPoints = configData["PH Calibration Points"] || [];
+    config["PH Calibration Points"] = phCalPoints;
   }
 
-  async function savePhCal() {
-    const res = await fetch('/ph_calibration', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(phCal)
-    });
-    const result = await res.json();
-    phCalMsg = result.message || result.error;
-    fetchPhCal();
-  }
-
-  async function addPhCalPoint() {
+  // Add calibration point with a known pH value
+  async function addPhCalPoint(known_ph) {
     const res = await fetch('/ph_calibration_point', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ known_ph: parseFloat(phCal.known_ph) })
+      body: JSON.stringify({ known_ph })
     });
     const result = await res.json();
     phCalMsg = result.message || result.error;
-    phCal.known_ph = '';
-    fetchPhCal();
+    await fetchPhCal();
   }
 
   async function fetchEmailSettings() {
@@ -609,11 +604,33 @@
 
 {#if menu === 'phcal'}
   <h2>pH Probe Calibration</h2>
-  <p>Step 1: Place the probe in a known pH solution (e.g., 4.00, 7.00, or 10.00).</p>
-  <input type="number" step="any" bind:value={phCal.known_ph} placeholder="Known pH value" />
-  <button on:click={addPhCalPoint}>Add Calibration Point</button>
+  <p>
+    Step 1: Place the probe in a calibration solution and click the corresponding button.<br>
+    <small>For best results, use 7.00 and 4.00 for 2-point, or add 10.00 for 3-point calibration.</small>
+  </p>
+  <div style="display: flex; gap: 1em; margin-bottom: 1em;">
+    <button on:click={() => addPhCalPoint(7.0)}>Add 7.00</button>
+    <button on:click={() => addPhCalPoint(4.0)}>Add 4.00</button>
+    <button on:click={() => addPhCalPoint(10.0)}>Add 10.00</button>
+  </div>
+  <div>
+    <strong>Calibration Progress:</strong>
+    {#if phCal && phCal.type}
+      <span style="color: green;">
+        {phCal.type === 'linear' ? '2-point calibration complete' : '3-point calibration complete'}
+      </span>
+    {:else if config["PH Calibration Points"] && config["PH Calibration Points"].length > 0}
+      <span>
+        {config["PH Calibration Points"].length} point(s) added.
+        {config["PH Calibration Points"].length === 1 ? 'Add one more for 2-point calibration.' : ''}
+        {config["PH Calibration Points"].length === 2 ? 'Add one more for 3-point calibration (optional).' : ''}
+      </span>
+    {:else}
+      <span>No calibration points added yet.</span>
+    {/if}
+  </div>
   {#if phCalMsg}
-    <div style="color: green;">{phCalMsg}</div>
+    <div style="color: green; margin-top: 1em;">{phCalMsg}</div>
   {/if}
 {/if}
 
