@@ -29,10 +29,11 @@ A web-based control panel for Raspberry Pi grow projects.
 - **HTU21D**: Temperature & Humidity sensor (I2C)
 - **MCP3008**: 8-channel ADC for analog sensors (SPI)
 - **DS18B20**: Water temperature sensor (1-Wire) or analog sensor via MCP3008
-- **Analog pH Sensor**: Recommended to use the Atlas Scientific Surveyor Analog pH kit because it can be left in the resevoir. Connected via MCP3008
+- **Analog pH Sensor**: Recommended Atlas Scientific Surveyor Analog pH kit (can stay in reservoir). Connected via MCP3008.
 - **Kasa Smart Plugs**: For controlling Fan, Humidifier, and Light (WiFi)
 
 ---
+
 ## Project Structure
 
 ```
@@ -59,7 +60,7 @@ GrowPi/
 - **MCP3008**: Connect to SPI pins (MISO, MOSI, SCLK, CE0/CE1).
 - **DS18B20**: Connect to a GPIO pin (with pull-up resistor) or via MCP3008.
 - **pH Sensor**: Connect analog output to MCP3008 channel.
-- **Kasa Smart Plugs**: Set up via Kasa app, ensure on same WiFi as Pi.
+- **Kasa Smart Plugs**: Set up via Kasa app; ensure they are on the same WiFi network as the Pi.
 
 ---
 
@@ -86,9 +87,9 @@ chmod +x install.sh
 ./install.sh
 ```
 
-- The script will prompt you to specify if you are running on a Raspberry Pi with sensors attached.
-- It will set up the Python backend, Node.js frontend, install all dependencies, and start both servers in the background.
-- Logs will be saved as `backend.log` and `frontend.log` in the project directory.
+- The script will prompt if you are running on a Raspberry Pi with sensors attached.
+- It sets up the Python backend, Node.js frontend, installs dependencies, and starts both servers in the background.
+- Logs are saved as `backend.log` and `frontend.log` in the project directory.
 
 ### 3. Access the Web UI
 
@@ -130,7 +131,7 @@ pip install -r requirements.txt
 pip install adafruit-circuitpython-htu21d w1thermsensor gpiozero python-kasa
 ```
 
-#### d. (Development only) If you are NOT on a Raspberry Pi, set the environment variable to mock sensors:
+#### d. (Development only) If you are NOT on a Raspberry Pi, set environment variable to mock sensors:
 
 ```bash
 export GROWPI_DEV=1
@@ -172,7 +173,23 @@ npm run dev -- --host
 ### 4. Configuration
 
 - Edit `backend/data.json` to match your sensor pins and Kasa device info.
-- Make sure your Pi and Kasa devices are on the same network.
+- Ensure your Pi and Kasa devices are on the same network.
+- Name your Kasa switches appropriately with: `"Light"`, `"Humidifier"`, `"Dehumidifier"`, `"Fan"`, `"Heater"`.
+
+---
+
+### In the GrowPi Dashboard
+
+- **Set your units first** in the **Units** tab.
+- **Configure your ideal ranges** in the **Ideal Ranges** tab. Default values are provided if you want to use them.
+- In the **Kasa Config** tab:
+  - Enter your Kasa account **username and password**.
+  - Use the search function to discover the IP addresses of your Kasa switches.
+  - Assign each discovered IP address to the appropriate device field (e.g., Light, Humidifier, Fan).
+- In the **Light Schedule** tab, set your desired light on/off schedule.
+- In the **pH Settings** tab, calibrate your pH probe.  
+  ⚠️ *Note: pH calibration may not always work perfectly—please verify your calibration carefully.*
+- In the **Email** tab, configure your email settings to enable alerts when pH readings are out of range.
 
 ---
 
@@ -190,7 +207,6 @@ npm run dev -- --host
 - If you see CORS or proxy errors, check your `vite.config.js` proxy settings.
 
 ---
-
 
 ## License
 
