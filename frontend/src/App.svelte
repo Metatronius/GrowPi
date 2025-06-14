@@ -557,6 +557,9 @@
     Password:
     <input type="password" bind:value={config["Kasa configs"].Password} />
   </label>
+  
+  
+  <h3>Device IPs</h3>
   <button on:click={findKasaDevices} disabled={findingKasa}>
   {findingKasa ? 'Searching...' : 'Find Kasa Devices'}
 </button>
@@ -573,9 +576,6 @@
     {/each}
   </ul>
 {/if}
-
-
-  <h3>Device IPs</h3>
   <ul>
     {#each Object.entries(config["Kasa configs"].Device_IPs) as [name, ip]}
       <li>
