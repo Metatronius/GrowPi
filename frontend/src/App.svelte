@@ -29,6 +29,7 @@
     to_email: ""
   };
 
+
   const stageOrder = ["Seedling", "Vegetative", "Flowering", "Drying"];
 
   // Fetch all config data on mount
@@ -65,6 +66,19 @@
     alert('Kasa config updated!');
     fetchConfig();
   }
+  async function findKasaDevices() {
+    findingKasa = true;
+    kasaError = '';
+    discoveredIPs = {};
+    try {
+      const res = await fetch('/find_kasa');
+      if (!res.ok) throw new Error('Failed to find Kasa devices');
+      discoveredIPs = await res.json();
+    } catch (e) {
+      kasaError = e.message;
+    }
+    findingKasa = false;
+  }
 
   async function setRange(stage, meter, subkey, values) {
     await fetch('/set', {
@@ -86,19 +100,6 @@
     fetchConfig();
   }
 
-  async function findKasaDevices() {
-    findingKasa = true;
-    kasaError = '';
-    discoveredIPs = {};
-    try {
-      const res = await fetch('/find_kasa');
-      if (!res.ok) throw new Error('Failed to find Kasa devices');
-      discoveredIPs = await res.json();
-    } catch (e) {
-      kasaError = e.message;
-    }
-    findingKasa = false;
-  }
 
   // Fetch the light schedule from the backend
   async function fetchLightSchedule() {
@@ -556,6 +557,23 @@
     Password:
     <input type="password" bind:value={config["Kasa configs"].Password} />
   </label>
+  <button on:click={findKasaDevices} disabled={findingKasa}>
+  {findingKasa ? 'Searching...' : 'Find Kasa Devices'}
+</button>
+
+{#if kasaError}
+  <p style="color:red;">Error: {kasaError}</p>
+{/if}
+
+{#if Object.keys(discoveredIPs).length > 0}
+  <h3>Discovered Devices</h3>
+  <ul>
+    {#each Object.entries(discoveredIPs) as [name, ip]}
+      <li><strong>{name}:</strong> {ip}</li>
+    {/each}
+  </ul>
+{/if}
+
 
   <h3>Device IPs</h3>
   <ul>
