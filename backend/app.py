@@ -173,13 +173,23 @@ def run_climate_and_light_control():
         dehumid_on = False
         heater_on = False
 
-        # Fan logic: Turn fan OFF only if temp is too low
-        if temp_val < temp_range["min"]:
-            fan_on = False
-            actions.append("Fan OFF (temp too low)")
+        # --- Fan logic ---
+        if humidity_metric == "VPD":
+            # Fan ON if temp > min and VPD < max (humid, needs drying)
+            if temp_val > temp_range["min"] and humidity_val < hum_range["max"]:
+                fan_on = True
+                actions.append("Fan ON (temp > min and VPD < max: air humid, drying)")
+            else:
+                fan_on = False
+                actions.append("Fan OFF (temp <= min or VPD >= max: air dry or temp low)")
         else:
-            fan_on = True
-            actions.append("Fan ON (temp at/above min)")
+            # Original logic for RH
+            if temp_val < temp_range["min"]:
+                fan_on = False
+                actions.append("Fan OFF (temp too low)")
+            else:
+                fan_on = True
+                actions.append("Fan ON (temp at/above min)")
 
         # Humidifier logic (fix for VPD)
         if humidity_metric == "VPD":
