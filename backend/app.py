@@ -173,24 +173,46 @@ def run_climate_and_light_control():
         dehumid_on = False
         heater_on = False
 
-        # Turn fan OFF only if temp or humidity are too low
-        if temp_val < temp_range["min"] or humidity_val < hum_range["min"]:
+        # Fan logic: Turn fan OFF only if temp is too low
+        if temp_val < temp_range["min"]:
             fan_on = False
-            actions.append("Fan OFF (temp or humidity too low)")
+            actions.append("Fan OFF (temp too low)")
         else:
             fan_on = True
-            actions.append("Fan ON (preferred or ideal conditions)")
+            actions.append("Fan ON (temp at/above min)")
 
-        # Humidifier logic (unchanged)
-        if temp_val < temp_range["min"] or humidity_val < hum_range["min"]:
-            humid_on = humidity_val < hum_range["min"]
-            if humid_on:
-                actions.append("Humidifier ON (humidity too low)")
+        # Humidifier logic (fix for VPD)
+        if humidity_metric == "VPD":
+            # For VPD, high value = low RH (too dry), so turn ON humidifier if VPD > max
+            if humidity_val > hum_range["max"]:
+                humid_on = True
+                actions.append("Humidifier ON (VPD too high, air too dry)")
             else:
-                actions.append("Humidifier OFF (temp too low, humidity ok)")
+                humid_on = False
+                actions.append("Humidifier OFF (VPD ok or too low)")
+            # For dehumidifier, turn ON if VPD < min (too humid)
+            if "Dehumidifier" in device_ips:
+                if humidity_val < hum_range["min"]:
+                    dehumid_on = True
+                    actions.append("Dehumidifier ON (VPD too low, air too humid)")
+                else:
+                    dehumid_on = False
+                    actions.append("Dehumidifier OFF (VPD ok or too high)")
         else:
-            humid_on = False
-            actions.append("Humidifier OFF (ideal or high conditions)")
+            # RH logic (original)
+            if humidity_val < hum_range["min"]:
+                humid_on = True
+                actions.append("Humidifier ON (RH too low)")
+            else:
+                humid_on = False
+                actions.append("Humidifier OFF (RH ok or too high)")
+            if "Dehumidifier" in device_ips:
+                if humidity_val > hum_range["max"]:
+                    dehumid_on = True
+                    actions.append("Dehumidifier ON (RH too high)")
+                else:
+                    dehumid_on = False
+                    actions.append("Dehumidifier OFF (RH ok or too low)")
 
         # --- Dehumidifier logic ---
         if "Dehumidifier" in device_ips:
