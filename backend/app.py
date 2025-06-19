@@ -60,7 +60,7 @@ PLUG_CACHE_SECONDS = 5  # Cache duration in seconds
 
 async def async_get_plug_status(ip):
     try:
-        plug = SmartPlug(ip)
+        plug = IotPlug(ip)
         await plug.update()
         return plug.is_on
     except Exception:
@@ -127,8 +127,7 @@ def ph_monitor_loop():
             if isinstance(ph_value, (int, float)) and (ph_value < min_ph or ph_value > max_ph):
                 send_email(
                     subject="GrowPi Alert: pH Out of Range",
-                    body=f"Current pH is {ph_value:.2f}, which is outside the ideal range ({min_ph}-{max_ph}).",
-                    to_email=data.get("Email Settings", {}).get("to_email", "")
+                    body=f"Current pH is {ph_value:.2f}, which is outside the ideal range ({min_ph}-{max_ph})."
                 )
         except Exception as e:
             print(f"pH monitor error: {e}")
@@ -155,7 +154,11 @@ def run_climate_and_light_control():
     temp_val = safe_read(temp_sensor, "read_temp", temp_error or sensor_errors.get("temperature", "Temperature sensor not available"))
     rh_val = safe_read(rh_sensor, "read_rh", rh_error or sensor_errors.get("humidity", "Humidity sensor not available"))
 
+    # --- FIX: Ensure temp_range is a flat dict ---
     temp_range = ideal["Air Temperature"][light_state]
+    if not (isinstance(temp_range, dict) and "min" in temp_range and "max" in temp_range and "target" in temp_range):
+        print(f"Climate/Light control error: temp_range is not a valid dict: {temp_range}")
+        return ["Error: Invalid temperature range configuration."]
 
     if humidity_metric == "VPD" and isinstance(temp_val, (int, float)) and isinstance(rh_val, (int, float)):
         temp_c = temp_val if temp_unit == "C" else to_celsius(temp_val)
@@ -176,7 +179,7 @@ def run_climate_and_light_control():
         # --- Fan logic ---
         if humidity_metric == "VPD":
             # Fan ON if temp > min and VPD < max (humid, needs drying)
-            if temp_val > temp_range["min"] and humidity_val < hum_range["max"]:
+            if isinstance(temp_val, (int, float)) and isinstance(humidity_val, (int, float)) and temp_val > temp_range["min"] and humidity_val < hum_range["max"]:
                 fan_on = True
                 actions.append("Fan ON (temp > min and VPD < max: air humid, drying)")
             else:
@@ -184,7 +187,7 @@ def run_climate_and_light_control():
                 actions.append("Fan OFF (temp <= min or VPD >= max: air dry or temp low)")
         else:
             # Original logic for RH
-            if temp_val < temp_range["min"]:
+            if isinstance(temp_val, (int, float)) and temp_val < temp_range["min"]:
                 fan_on = False
                 actions.append("Fan OFF (temp too low)")
             else:
