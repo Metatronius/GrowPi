@@ -60,7 +60,7 @@ PLUG_CACHE_SECONDS = 5  # Cache duration in seconds
 
 async def async_get_plug_status(ip):
     try:
-        plug = IotPlug(ip)
+        plug = SmartPlug(ip)
         await plug.update()
         return plug.is_on
     except Exception:
@@ -171,28 +171,28 @@ def run_climate_and_light_control():
     actions = []
 
     async def control_devices():
-        fan_on = True  # Default: keep fan ON
-        humid_on = False
-        dehumid_on = False
-        heater_on = False
+        fan_always_on = data.get("Fan Always On", True)
+        fan_on = True if fan_always_on else None  # Default: always ON unless user disables
 
-        # --- Fan logic ---
-        if humidity_metric == "VPD":
-            # Fan ON if temp > min and VPD < max (humid, needs drying)
-            if isinstance(temp_val, (int, float)) and isinstance(humidity_val, (int, float)) and temp_val > temp_range["min"] and humidity_val < hum_range["max"]:
-                fan_on = True
-                actions.append("Fan ON (temp > min and VPD < max: air humid, drying)")
+        if not fan_always_on:
+            # Original logic for RH/VPD if user disables "always on"
+            if humidity_metric == "VPD":
+                if isinstance(temp_val, (int, float)) and isinstance(humidity_val, (int, float)) and temp_val > temp_range["min"] and humidity_val < hum_range["max"]:
+                    fan_on = True
+                    actions.append("Fan ON (temp > min and VPD < max: air humid, drying)")
+                else:
+                    fan_on = False
+                    actions.append("Fan OFF (temp <= min or VPD >= max: air dry or temp low)")
             else:
-                fan_on = False
-                actions.append("Fan OFF (temp <= min or VPD >= max: air dry or temp low)")
+                if isinstance(temp_val, (int, float)) and temp_val < temp_range["min"]:
+                    fan_on = False
+                    actions.append("Fan OFF (temp too low)")
+                else:
+                    fan_on = True
+                    actions.append("Fan ON (temp at/above min)")
         else:
-            # Original logic for RH
-            if isinstance(temp_val, (int, float)) and temp_val < temp_range["min"]:
-                fan_on = False
-                actions.append("Fan OFF (temp too low)")
-            else:
-                fan_on = True
-                actions.append("Fan ON (temp at/above min)")
+            fan_on = True
+            actions.append("Fan ON (user override: always on)")
 
         # Humidifier logic (fix for VPD)
         if humidity_metric == "VPD":
@@ -662,6 +662,20 @@ def set_units():
     data["Units"] = units
     save_data(data)
     return jsonify({"message": "Units updated and config converted."})
+
+@app.route('/fan_mode', methods=['GET'])
+def get_fan_mode():
+    data = load_data()
+    return jsonify({"always_on": data.get("Fan Always On", True)})
+
+@app.route('/fan_mode', methods=['POST'])
+def set_fan_mode():
+    payload = request.json
+    always_on = payload.get("always_on", True)
+    data = load_data()
+    data["Fan Always On"] = always_on
+    save_data(data)
+    return jsonify({"message": f"Fan Always On set to {always_on}."})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

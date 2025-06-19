@@ -28,6 +28,7 @@
     from_email: "",
     to_email: ""
   };
+  let fanAlwaysOn = true;
 
 
   const stageOrder = ["Seedling", "Vegetative", "Flowering", "Drying"];
@@ -176,6 +177,22 @@
     setKasa();
   }
 
+  async function fetchFanMode() {
+    const res = await fetch('/fan_mode');
+    const data = await res.json();
+    fanAlwaysOn = data.always_on;
+  }
+
+  async function setFanMode(val) {
+    await fetch('/fan_mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ always_on: val })
+    });
+    fanAlwaysOn = val;
+    alert('Fan mode updated!');
+  }
+
   // Fetch data on mount
   onMount(() => {
     fetchConfig();
@@ -183,6 +200,7 @@
     fetchLightSchedule();
     fetchPhCal();
     fetchEmailSettings();
+    fetchFanMode();
   });
 
   // Default selectedStage to current stage when switching to ranges tab
@@ -465,6 +483,10 @@
           vertical-align:middle;
         "></span>
         <span style="color: {status.fan_status ? 'green' : 'red'}">{status.fan_status ? 'ON' : 'OFF'}</span>
+        <label style="margin-left:1em;">
+          <input type="checkbox" bind:checked={fanAlwaysOn} on:change={() => setFanMode(fanAlwaysOn)} />
+          {fanAlwaysOn ? 'On' : 'Off'}
+        </label>
       </div>
       <div>
         <strong>Humidifier:</strong>
